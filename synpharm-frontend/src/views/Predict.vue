@@ -258,9 +258,13 @@
               <svg class="pc__btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
               保存结果
             </button>
-            <button class="pc__btn pc__btn--primary">
-              <svg class="pc__btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
-              3D 可视化
+            <button class="predict__btn predict__btn--primary" @click="goToVisualization">
+              <svg class="predict__btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+                <line x1="12" y1="22.08" x2="12" y2="12"></line>
+              </svg>
+              3D可视化
             </button>
           </div>
         </div>
@@ -271,6 +275,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onUnmounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { predictApi, batchApi, type BatchStatus } from '@/api/predict'
 import Sidebar from '@/components/Sidebar.vue'
 import type { PredictionResult } from '@/types'
@@ -291,6 +296,7 @@ const showAdvancedOptions = ref(false)
 const isLoading = ref(false)
 const predictionResult = ref<PredictionResult | null>(null)
 const predictError = ref('')
+const router = useRouter()
 
 const predictionTypes: Array<{ value: 'ppi' | 'dti' | 'ddi', label: string, icon: string, description: string }> = [
   { value: 'ppi', label: 'PPI预测', icon: '🔬', description: '蛋白质-蛋白质相互作用' },
@@ -604,6 +610,19 @@ const handleBatchDownload = async () => {
 onUnmounted(() => {
   if (batchTimer) clearInterval(batchTimer)
 })
+
+// ================= 3D 可视化导航 =================
+const goToVisualization = () => {
+  if (!predictionResult.value) return
+  router.push({
+    path: '/visualization',
+    query: {
+      id: String(predictionResult.value.id),
+      targetName: predictionResult.value.targetName,
+      targetId: predictionResult.value.targetId,
+    },
+  })
+}
 </script>
 
 <style lang="scss" scoped>

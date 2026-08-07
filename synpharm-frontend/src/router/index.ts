@@ -48,6 +48,12 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/result/:id?',
+      name: 'ResultDetail',
+      component: () => import('@/views/ResultDetail.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
       path: '/visualization',
       name: 'Visualization',
       component: () => import('@/views/Visualization.vue'),

@@ -80,6 +80,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { mockTasks, mockResults } from '@/data/mockResults'
 import Sidebar from '@/components/Sidebar.vue'
@@ -87,6 +88,7 @@ import ResultCard from '@/components/ResultCard.vue'
 import type { PredictionResult, Task } from '@/types'
 
 const authStore = useAuthStore()
+const router = useRouter()
 
 const currentDate = computed(() => {
   return new Date().toLocaleDateString('zh-CN', {
@@ -135,11 +137,28 @@ const getStatusText = (status: string): string => {
 }
 
 const handleResultDetail = (result: PredictionResult) => {
-  console.log('查看详情:', result)
+  router.push({
+    path: '/result/' + String(result.id),
+    query: {
+      id: String(result.id),
+      targetId: result.targetId || '',
+      targetName: result.targetName || '',
+      bindingAffinity: String(result.bindingAffinity ?? ''),
+      confidenceScore: String(result.confidenceScore ?? ''),
+      confidenceLevel: result.confidenceLevel || '',
+    },
+  })
 }
 
 const handleResult3D = (result: PredictionResult) => {
-  console.log('查看3D:', result)
+  router.push({
+    path: '/visualization',
+    query: {
+      id: String(result.id),
+      targetName: result.targetName || '',
+      targetId: result.targetId || '',
+    },
+  })
 }
 </script>
 
