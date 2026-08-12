@@ -57,6 +57,7 @@
 
 <script setup lang="ts">
 import { reactive, computed, ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { resultApi } from '@/api/predict'
 import Sidebar from '@/components/Sidebar.vue'
 import ResultCard from '@/components/ResultCard.vue'
@@ -118,12 +119,31 @@ const filteredResults = computed(() => {
   return list
 })
 
+const router = useRouter()
+
 const handleResultDetail = (result: PredictionResult) => {
-  console.log('查看详情:', result)
+  router.push({
+    path: '/result/' + String(result.id),
+    query: {
+      id: String(result.id),
+      targetId: result.targetId || '',
+      targetName: result.targetName || '',
+      bindingAffinity: String(result.bindingAffinity ?? ''),
+      confidenceScore: String(result.confidenceScore ?? ''),
+      confidenceLevel: result.confidenceLevel || '',
+    },
+  })
 }
 
 const handleResult3D = (result: PredictionResult) => {
-  console.log('查看3D:', result)
+  router.push({
+    path: '/visualization',
+    query: {
+      id: String(result.id),
+      targetName: result.targetName || '',
+      targetId: result.targetId || '',
+    },
+  })
 }
 </script>
 
