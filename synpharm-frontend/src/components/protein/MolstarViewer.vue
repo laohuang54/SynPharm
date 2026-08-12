@@ -38,9 +38,11 @@ const props = withDefaults(
   defineProps<{
     pdbId: string
     autoRotate?: boolean
+    showGrid?: boolean
   }>(),
   {
     autoRotate: false,
+    showGrid: false,
   }
 )
 
@@ -84,10 +86,48 @@ let currentRepType = 'cartoon'
 let currentColor = 'chain-id'
 
 let labelsOn = false
-let gridOn = true
-let camPos: number[] | null = null
-let camTarget: number[] | null = null
-let camUp: number[] | null = null
+
+/* =========================================================
+ * Initial Camera State
+ *
+ * 每个 PDB 加载完成后保存其放大后的初始视角。
+ * resetView() 始终恢复此状态。
+ * ========================================================= */
+
+let initialCameraState: {
+  position: number[]
+  target: number[]
+  up: number[]
+} | null = null
+
+/* =========================================================
+ * Grid State (Mol* native Shape)
+ *
+ * 3 个独立 representation 实现不同视觉层级：
+ *   gridAxisRepr  — XYZ 坐标轴 (alpha 0.7, sizeFactor 4)
+ *   gridPlaneRepr — XY/XZ/YZ 网格面 (alpha 0.12, sizeFactor 1)
+ *   gridTickRepr  — 刻度标记 (alpha 0.35, sizeFactor 2)
+ * ========================================================= */
+
+let gridAxisRepr: any = null
+let gridPlaneRepr: any = null
+let gridTickRepr: any = null
+
+interface GridBounds {
+  center: [number, number, number]
+  radius: number
+  extent: number
+}
+
+function computeGridBounds(): GridBounds | null {
+  const bs = plugin?.canvas3d?.boundingSphere
+  if (!bs || bs.radius <= 0) return null
+  return {
+    center: [bs.center[0], bs.center[1], bs.center[2]],
+    radius: bs.radius,
+    extent: bs.radius * 1.3,
+  }
+}
 
 /* =========================================================
  * Operation Queue
@@ -265,6 +305,13 @@ async function loadStructure(
       labelRepresentation = null
 
       labelsOn = false
+      initialCameraState = null
+
+      /* -----------------------------------------
+       * 清理旧 Grid
+       * ----------------------------------------- */
+
+      removeAllGrids()
 
       /* -----------------------------------------
        * Download PDB
@@ -343,10 +390,22 @@ async function loadStructure(
       currentPdbId = pdbId
 
       /* -----------------------------------------
-       * Grid
+       * Grid (after structure is ready)
        * ----------------------------------------- */
 
-      setGridVisible(gridOn)
+      if (props.showGrid) {
+        await createSpatialGrid()
+      }
+
+      /* -----------------------------------------
+       * Save initial camera (after auto-fit + zoom)
+       * ----------------------------------------- */
+
+      // 等待 Mol* 完成 auto-fit 渲染
+      await new Promise(r => requestAnimationFrame(r))
+      await new Promise(r => requestAnimationFrame(r))
+
+      saveInitialCameraState()
 
       /* -----------------------------------------
        * Finish
@@ -378,36 +437,68 @@ async function loadStructure(
 }
 
 /* =========================================================
+ * Save Initial Camera State
+ *
+ * 在 PDB 加载 + Mol* 自动 fit 完成后调用。
+ * 将当前 Camera 放大 ~20% 后保存为 initialCameraState。
+ * ========================================================= */
+
+function saveInitialCameraState(): void {
+  const p = plugin
+  if (!p) return
+
+  const cam = (p.canvas3d as any)?.camera as any
+  const s = cam?.state
+  if (!s?.position || !s?.target || !s?.up) return
+
+  const pos = s.position as number[]
+  const target = s.target as number[]
+  const up = s.up as number[]
+
+  // 方向向量: camera → target
+  const dx = pos[0] - target[0]
+  const dy = pos[1] - target[1]
+  const dz = pos[2] - target[2]
+
+  // 镜头距离缩短 ~15%，蛋白质显示更大
+  const scale = 0.85
+  const zoomedPos = [
+    target[0] + dx * scale,
+    target[1] + dy * scale,
+    target[2] + dz * scale,
+  ]
+
+  cam.setState({ position: zoomedPos, target, up }, 0)
+  cam.update?.()
+
+  initialCameraState = {
+    position: zoomedPos,
+    target: target as number[],
+    up: up as number[],
+  }
+
+  p.canvas3d?.requestDraw()
+
+  console.log('[Molstar] initial camera state saved (zoomed 1.25×)')
+}
+
+/* =========================================================
  * Reset Camera
  * ========================================================= */
 
 function resetView(): void {
-
   const p = plugin
-
   if (!p) return
 
   console.log('[Molstar] reset view')
 
-  // Save initial camera on first reset if not yet saved
-  if (!camPos || !camTarget || !camUp) {
-    const cam = (p.canvas3d as any)?.camera as any
-    const s = cam?.state
-    if (s) {
-      camPos = [...s.position]
-      camTarget = [...s.target]
-      camUp = [...s.up]
-    }
-  }
-
   const cam = (p.canvas3d as any)?.camera as any
 
-  if (cam?.setState && camPos && camTarget && camUp) {
-    cam.setState({ position: camPos, target: camTarget, up: camUp }, 0)
+  if (cam?.setState && initialCameraState) {
+    cam.setState(initialCameraState, 0)
     cam.update?.()
   }
 
-  // Force immediate + deferred redraw to ensure view refreshes without user interaction
   p.canvas3d?.requestDraw()
   requestAnimationFrame(() => {
     p.canvas3d?.requestDraw()
@@ -448,6 +539,22 @@ async function updateRepresentation(
   }
 
   return enqueue(async () => {
+
+    /* -----------------------------------------
+     * 保存当前 Camera State
+     *
+     * Mol* 在重建 Representation 后可能自动 Fit Camera。
+     * 因此先保存用户当前的视角，切换完成后再恢复。
+     * ----------------------------------------- */
+
+    const cam = (p.canvas3d as any)?.camera as any
+    const savedCamState = cam?.state
+      ? {
+          position: [...cam.state.position] as number[],
+          target: [...cam.state.target] as number[],
+          up: [...cam.state.up] as number[],
+        }
+      : null
 
     console.log(
       '[Molstar] representation:',
@@ -495,6 +602,20 @@ async function updateRepresentation(
 
       p.canvas3d?.requestDraw()
 
+      /* -----------------------------------------
+       * 恢复 Camera State
+       *
+       * 等待至少 1 帧让 Mol* 完成内部处理，
+       * 然后恢复切换前的视角。
+       * ----------------------------------------- */
+
+      if (savedCamState && cam?.setState) {
+        await new Promise(r => requestAnimationFrame(r))
+        cam.setState(savedCamState, 0)
+        cam.update?.()
+        p.canvas3d?.requestDraw()
+      }
+
       console.log(
         '[Molstar] representation changed:',
         type
@@ -534,6 +655,20 @@ async function setColorScheme(
   }
 
   return enqueue(async () => {
+
+    /*
+     * 保存当前 Camera State。
+     * 与 updateRepresentation 同理，防止 Mol* 自动 Fit。
+     */
+
+    const cam = (p.canvas3d as any)?.camera as any
+    const savedCamState = cam?.state
+      ? {
+          position: [...cam.state.position] as number[],
+          target: [...cam.state.target] as number[],
+          up: [...cam.state.up] as number[],
+        }
+      : null
 
     console.log(
       '[Molstar] color:',
@@ -582,6 +717,13 @@ async function setColorScheme(
 
       p.canvas3d?.requestDraw()
 
+      if (savedCamState && cam?.setState) {
+        await new Promise(r => requestAnimationFrame(r))
+        cam.setState(savedCamState, 0)
+        cam.update?.()
+        p.canvas3d?.requestDraw()
+      }
+
       console.log(
         '[Molstar] color changed:',
         color
@@ -598,35 +740,315 @@ async function setColorScheme(
 }
 
 /* =========================================================
- * Grid
+ * Grid — 3D Spatial Reference System
+ *
+ * 使用 Mol* 原生 LinesBuilder → Shape → Representation，
+ * 在蛋白质 3D 坐标空间中绘制 XYZ 坐标轴 + 三平面网格 + 刻度。
+ * 所有元素共用 Mol* Scene + Camera（自动同步）。
+ *
+ * 视觉层级（低到高）：
+ *   Grid Planes  <  Ticks  <  Axes  <  Protein
+ *
+ * 颜色语义：
+ *   X 轴 → 柔红 (rgb(239, 68, 68))   — 对应 $error-color
+ *   Y 轴 → 柔绿 (rgb(16, 185, 129))   — 对应 $success-color
+ *   Z 轴 → 柔蓝 (rgb(59, 130, 246))   — 对应 $accent-color
  * ========================================================= */
 
-function setGridVisible(
-  visible: boolean
-): void {
+const GRID_SPACING = 5   // Å
+const TICK_SPACING = 10  // Å
 
-  gridOn = visible
+const AXIS_COLORS: [number, number, number][] = [
+  [239, 68, 68],   // 0: X — soft red
+  [16, 185, 129],  // 1: Y — soft green
+  [59, 130, 246],  // 2: Z — soft blue
+]
 
-  if (!plugin?.canvas3d) {
-    return
+const GRID_COLOR: [number, number, number] = [160, 175, 195] // 淡灰蓝
+
+function computeTickLength(extent: number): number {
+  return Math.min(Math.max(extent * 0.04, 1.0), 5.0)
+}
+
+/* -----------------------------------------
+ * 惰性 import：只在创建 Grid 时加载
+ * ----------------------------------------- */
+
+let _LinesBuilder: any = null
+let _Lines: any = null
+let _Shape: any = null
+let _Representation: any = null
+let _Color: any = null
+let _ParamDefinition: any = null
+
+async function ensureGridModules(): Promise<boolean> {
+  if (_LinesBuilder && _Lines && _Shape && _Representation && _Color && _ParamDefinition) return true
+  try {
+    ;[
+      { LinesBuilder: _LinesBuilder },
+      { Lines: _Lines },
+      { Shape: _Shape },
+      { Representation: _Representation },
+      { Color: _Color },
+      { ParamDefinition: _ParamDefinition },
+    ] = await Promise.all([
+      import('molstar/lib/mol-geo/geometry/lines/lines-builder.js'),
+      import('molstar/lib/mol-geo/geometry/lines/lines.js'),
+      import('molstar/lib/mol-model/shape.js'),
+      import('molstar/lib/mol-repr/representation.js'),
+      import('molstar/lib/mol-util/color/index.js'),
+      import('molstar/lib/mol-util/param-definition.js'),
+    ])
+    return true
+  } catch (err) {
+    console.error('[Grid] module import failed:', err)
+    return false
+  }
+}
+
+/* -----------------------------------------
+ * 通用：Lines → Representation
+ * ----------------------------------------- */
+
+function linesToRepr(
+  lines: any,
+  name: string,
+  colorFn: (group: number) => any,
+  alpha: number,
+  sizeFactor: number,
+): any {
+  const defaultParams = _ParamDefinition.getDefaultValues(_Lines.Params)
+
+  const shape = _Shape.create(
+    name,
+    { pdbId: currentPdbId },
+    lines,
+    colorFn,
+    () => 1,
+    () => name,
+  )
+
+  const renderObject = _Shape.createRenderObject(shape, {
+    ...defaultParams,
+    alpha,
+    lineSizeAttenuation: false,
+    sizeFactor,
+  })
+
+  return _Representation.fromRenderObject(name, renderObject)
+}
+
+/* -----------------------------------------
+ * XYZ 坐标轴
+ * ----------------------------------------- */
+
+function createAxesRepr(bounds: GridBounds): any {
+  const [cx, cy, cz] = bounds.center
+  const e = bounds.extent
+  const builder = _LinesBuilder.create(6, 12)
+
+  // 每个轴画完整线（正负方向）
+  // X axis (group 0) — 红色
+  builder.add(cx - e, cy, cz, cx + e, cy, cz, 0)
+  // Y axis (group 1) — 绿色
+  builder.add(cx, cy - e, cz, cx, cy + e, cz, 1)
+  // Z axis (group 2) — 蓝色
+  builder.add(cx, cy, cz - e, cx, cy, cz + e, 2)
+
+  const lines = builder.getLines()
+  if (lines.lineCount === 0) return null
+
+  return linesToRepr(
+    lines,
+    'Grid Axes',
+    (g) => _Color.fromRgb(...AXIS_COLORS[g] ?? [180, 180, 180]),
+    0.7,
+    4,
+  )
+}
+
+/* -----------------------------------------
+ * 三平面网格 (XY / XZ / YZ)
+ * ----------------------------------------- */
+
+function createGridPlanesRepr(bounds: GridBounds): any {
+  const [cx, cy, cz] = bounds.center
+  const e = bounds.extent
+  const spacing = GRID_SPACING
+
+  // 计算所需行数
+  const lineCount = Math.ceil((2 * e) / spacing) * 3 * 2
+  const builder = _LinesBuilder.create(lineCount, lineCount * 2)
+
+  const step = spacing
+
+  // XY plane (Z = cz)
+  for (let x = cx - e; x <= cx + e + 0.001; x += step) {
+    builder.add(x, cy - e, cz, x, cy + e, cz, 0)
+  }
+  for (let y = cy - e; y <= cy + e + 0.001; y += step) {
+    builder.add(cx - e, y, cz, cx + e, y, cz, 0)
   }
 
+  // XZ plane (Y = cy)
+  for (let x = cx - e; x <= cx + e + 0.001; x += step) {
+    builder.add(x, cy, cz - e, x, cy, cz + e, 0)
+  }
+  for (let z = cz - e; z <= cz + e + 0.001; z += step) {
+    builder.add(cx - e, cy, z, cx + e, cy, z, 0)
+  }
+
+  // YZ plane (X = cx)
+  for (let y = cy - e; y <= cy + e + 0.001; y += step) {
+    builder.add(cx, y, cz - e, cx, y, cz + e, 0)
+  }
+  for (let z = cz - e; z <= cz + e + 0.001; z += step) {
+    builder.add(cx, cy - e, z, cx, cy + e, z, 0)
+  }
+
+  const lines = builder.getLines()
+  if (lines.lineCount === 0) return null
+
+  return linesToRepr(
+    lines,
+    'Grid Planes',
+    () => _Color.fromRgb(...GRID_COLOR),
+    0.12,
+    1,
+  )
+}
+
+/* -----------------------------------------
+ * 刻度标记
+ * ----------------------------------------- */
+
+function createTicksRepr(bounds: GridBounds): any {
+  const [cx, cy, cz] = bounds.center
+  const e = bounds.extent
+  const step = TICK_SPACING
+  const tickLen = computeTickLength(e)
+
+  // 沿各轴的刻度数
+  const tickCount = Math.floor(e / step)
+  const lineCount = tickCount * 3 * 2
+  const builder = _LinesBuilder.create(lineCount + 10, (lineCount + 10) * 2)
+
+  // X axis ticks → 垂直方向 (Y)
+  for (let x = cx + step; x <= cx + e + 0.001; x += step) {
+    builder.add(x, cy, cz, x, cy + tickLen, cz, 0)
+    builder.add(x, cy, cz, x, cy - tickLen, cz, 0)
+  }
+  for (let x = cx - step; x >= cx - e - 0.001; x -= step) {
+    builder.add(x, cy, cz, x, cy + tickLen, cz, 0)
+    builder.add(x, cy, cz, x, cy - tickLen, cz, 0)
+  }
+
+  // Y axis ticks → 水平方向 (X)
+  for (let y = cy + step; y <= cy + e + 0.001; y += step) {
+    builder.add(cx, y, cz, cx + tickLen, y, cz, 1)
+    builder.add(cx, y, cz, cx - tickLen, y, cz, 1)
+  }
+  for (let y = cy - step; y >= cy - e - 0.001; y -= step) {
+    builder.add(cx, y, cz, cx + tickLen, y, cz, 1)
+    builder.add(cx, y, cz, cx - tickLen, y, cz, 1)
+  }
+
+  // Z axis ticks → Y 方向 (更有机会被看到)
+  for (let z = cz + step; z <= cz + e + 0.001; z += step) {
+    builder.add(cx, cy, z, cx, cy + tickLen, z, 2)
+    builder.add(cx, cy, z, cx, cy - tickLen, z, 2)
+  }
+  for (let z = cz - step; z >= cz - e - 0.001; z -= step) {
+    builder.add(cx, cy, z, cx, cy + tickLen, z, 2)
+    builder.add(cx, cy, z, cx, cy - tickLen, z, 2)
+  }
+
+  const lines = builder.getLines()
+  if (lines.lineCount === 0) return null
+
+  return linesToRepr(
+    lines,
+    'Grid Ticks',
+    (g) => _Color.fromRgb(...AXIS_COLORS[g] ?? [180, 180, 180]),
+    0.35,
+    2,
+  )
+}
+
+/* -----------------------------------------
+ * 统一创建入口
+ * ----------------------------------------- */
+
+async function createSpatialGrid(): Promise<void> {
+  const p = plugin
+  if (!p || !p.canvas3d || !mainStructure) return
+
+  removeAllGrids()
+
+  const ok = await ensureGridModules()
+  if (!ok) return
+
+  const bounds = computeGridBounds()
+  if (!bounds) return
+
   try {
+    gridAxisRepr = createAxesRepr(bounds)
+    if (gridAxisRepr) p.canvas3d.add(gridAxisRepr)
+  } catch (err) { console.error('[Grid] axes creation failed:', err) }
 
-    plugin.canvas3d.setProps({
-      grid: {
-        visible,
-      },
-    } as any)
+  try {
+    gridPlaneRepr = createGridPlanesRepr(bounds)
+    if (gridPlaneRepr) p.canvas3d.add(gridPlaneRepr)
+  } catch (err) { console.error('[Grid] planes creation failed:', err) }
 
+  try {
+    gridTickRepr = createTicksRepr(bounds)
+    if (gridTickRepr) p.canvas3d.add(gridTickRepr)
+  } catch (err) { console.error('[Grid] ticks creation failed:', err) }
+
+  p.canvas3d.requestDraw()
+}
+
+/* -----------------------------------------
+ * 清理
+ * ----------------------------------------- */
+
+function removeOneGrid(r: any): void {
+  if (!r || !plugin?.canvas3d) return
+  try {
+    plugin.canvas3d.remove(r)
+    r.destroy?.()
+  } catch (_) {}
+}
+
+function removeAllGrids(): void {
+  removeOneGrid(gridAxisRepr);  gridAxisRepr = null
+  removeOneGrid(gridPlaneRepr); gridPlaneRepr = null
+  removeOneGrid(gridTickRepr);  gridTickRepr = null
+}
+
+/* -----------------------------------------
+ * 可见性
+ * ----------------------------------------- */
+
+async function setGridVisible(visible: boolean): Promise<void> {
+  if (!plugin?.canvas3d) return
+
+  if (visible) {
+    // 如果未创建则创建，否则恢复可见
+    if (!gridAxisRepr && !gridPlaneRepr && !gridTickRepr) {
+      await createSpatialGrid()
+    } else {
+      gridAxisRepr?.setState?.({ visible: true })
+      gridPlaneRepr?.setState?.({ visible: true })
+      gridTickRepr?.setState?.({ visible: true })
+      plugin.canvas3d.requestDraw()
+    }
+  } else {
+    gridAxisRepr?.setState?.({ visible: false })
+    gridPlaneRepr?.setState?.({ visible: false })
+    gridTickRepr?.setState?.({ visible: false })
     plugin.canvas3d.requestDraw()
-
-  } catch (err) {
-
-    console.error(
-      '[Molstar] grid failed:',
-      err
-    )
   }
 }
 
@@ -999,6 +1421,18 @@ watch(
 )
 
 /* =========================================================
+ * Watch showGrid
+ * ========================================================= */
+
+watch(
+  () => props.showGrid,
+  async (visible) => {
+    await setGridVisible(visible)
+  },
+  { immediate: true }
+)
+
+/* =========================================================
  * Watch Auto Rotate
  * ========================================================= */
 
@@ -1031,6 +1465,8 @@ onMounted(() => {
  * ========================================================= */
 
 onBeforeUnmount(() => {
+
+  removeAllGrids()
 
   stopAutoRotate()
 
@@ -1066,15 +1502,10 @@ onBeforeUnmount(() => {
 .molstar-viewer {
   width: 100%;
   height: 480px;
-
   position: relative;
-
   border-radius: $border-radius-lg;
-
   border: 1px solid $border-light;
-
   overflow: hidden;
-
   background: #000;
 }
 
@@ -1089,31 +1520,20 @@ onBeforeUnmount(() => {
 
 .molstar-viewer__status {
   position: absolute;
-
   inset: 0;
-
   display: flex;
-
   flex-direction: column;
-
   align-items: center;
-
   justify-content: center;
-
   gap: $spacing-sm;
-
   background: rgba(0, 0, 0, 0.85);
-
   z-index: 10;
-
   font-size: $font-size-sm;
-
   color: rgba(255, 255, 255, 0.85);
 }
 
 .molstar-viewer__status--error {
   background: rgba(220, 38, 38, 0.15);
-
   color: $error-color;
 }
 

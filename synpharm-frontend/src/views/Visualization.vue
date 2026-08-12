@@ -62,6 +62,8 @@
 
             :auto-rotate="autoRotate"
 
+            :show-grid="showGrid"
+
             @structure-loaded="onStructureLoaded"
           />
 
@@ -755,7 +757,7 @@ const colorScheme =
   ref('chain')
 
 const showGrid =
-  ref(true)
+  ref(false)
 
 const autoRotate =
   ref(false)
@@ -885,11 +887,6 @@ function onStructureLoaded(): void {
 
   nextTick(() => {
 
-    molstarRef.value
-      ?.setGridVisible(
-        showGrid.value
-      )
-
     if (displayMode.value !== 'cartoon') {
 
       const type =
@@ -988,21 +985,6 @@ function changeColorScheme(
 /* =========================================================
  * Grid
  * ========================================================= */
-
-watch(
-  showGrid,
-  value => {
-
-    nextTick(() => {
-
-      molstarRef.value
-        ?.setGridVisible(value)
-
-    })
-
-  }
-)
-
 
 /* =========================================================
  * Labels
