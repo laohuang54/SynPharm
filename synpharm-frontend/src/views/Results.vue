@@ -124,14 +124,6 @@ const router = useRouter()
 const handleResultDetail = (result: PredictionResult) => {
   router.push({
     path: '/result/' + String(result.id),
-    query: {
-      id: String(result.id),
-      targetId: result.targetId || '',
-      targetName: result.targetName || '',
-      bindingAffinity: String(result.bindingAffinity ?? ''),
-      confidenceScore: String(result.confidenceScore ?? ''),
-      confidenceLevel: result.confidenceLevel || '',
-    },
   })
 }
 

@@ -38,6 +38,10 @@
 
           <p class="pc__form-subtitle">{{ getFormSubtitle() }}</p>
 
+          <div v-if="prefilledTargetName" class="pc__target-tip">
+            🎯 已选择靶点：<b>{{ prefilledTargetName }}</b>
+          </div>
+
           <div class="pc__form">
             <div class="pc__input-block">
               <div class="pc__input-head">
@@ -224,9 +228,17 @@
                 <span class="pc__detail-label">靶点 ID</span>
                 <span class="pc__detail-val">{{ predictionResult.targetId }}</span>
               </div>
-              <div class="pc__detail pc__detail--accent">
+              <div
+                v-if="selectedType === 'dti'"
+                class="pc__detail pc__detail--accent"
+              >
                 <span class="pc__detail-label">结合亲和力</span>
-                <span class="pc__detail-val">{{ predictionResult.bindingAffinity.toFixed(2) }} <small>kcal/mol</small></span>
+                <span class="pc__detail-val">
+                  {{ predictionResult.bindingAffinity != null
+                    ? predictionResult.bindingAffinity.toFixed(2)
+                    : '-' }}
+                  <small v-if="predictionResult.bindingAffinity != null">kcal/mol</small>
+                </span>
               </div>
             </div>
           </div>
@@ -274,8 +286,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onUnmounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { predictApi, batchApi, type BatchStatus } from '@/api/predict'
 import Sidebar from '@/components/Sidebar.vue'
 import type { PredictionResult } from '@/types'
@@ -297,6 +309,24 @@ const isLoading = ref(false)
 const predictionResult = ref<PredictionResult | null>(null)
 const predictError = ref('')
 const router = useRouter()
+const route = useRoute()
+
+// 从靶点库跳转进入时，预填靶点信息
+const prefilledTargetName = ref('')
+
+const applyTargetFromQuery = () => {
+  const targetId = route.query.targetId
+  const targetName = route.query.targetName
+  if (targetId) {
+    selectedType.value = 'dti'
+    selectedInputType.value = 'uniprot'
+    secondInputValue.value = String(targetId)
+    secondInputError.value = ''
+    prefilledTargetName.value = targetName ? String(targetName) : ''
+  }
+}
+
+onMounted(applyTargetFromQuery)
 
 const predictionTypes: Array<{ value: 'ppi' | 'dti' | 'ddi', label: string, icon: string, description: string }> = [
   { value: 'ppi', label: 'PPI预测', icon: '🔬', description: '蛋白质-蛋白质相互作用' },
@@ -1671,6 +1701,17 @@ const goToVisualization = () => {
   margin: $spacing-lg 0 $spacing-md;
   font-size: $font-size-sm;
   color: $text-muted;
+}
+
+.pc__target-tip {
+  margin: $spacing-md 0;
+  padding: $spacing-sm $spacing-md;
+  background: rgba(59, 130, 246, 0.08);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  border-radius: $border-radius-md;
+  font-size: $font-size-sm;
+  color: $accent-color;
+  b { font-weight: 600; }
 }
 
 /* ---------- 输入区 ---------- */

@@ -291,6 +291,21 @@
 
           </h3>
 
+          <div
+            v-if="resultLoading"
+            class="visualization__info-hint"
+          >
+            预测结果加载中…
+          </div>
+
+          <div
+            v-else-if="resultError"
+            class="visualization__info-hint visualization__info-hint--error"
+            :title="resultError"
+          >
+            预测结果加载失败，已显示兜底数据
+          </div>
+
           <div class="visualization__info-content">
 
             <div class="visualization__info-row">
@@ -455,7 +470,6 @@ import {
 import { useRoute } from 'vue-router'
 
 import {
-  mockResults,
   mockTargets,
 } from '@/data/mockResults'
 
@@ -463,6 +477,9 @@ import {
   resolveStructure,
   getPdbIdFromUniProt,
 } from '@/utils/protein/structureResolver'
+
+import { resultApi } from '@/api/predict'
+import type { PredictionResult } from '@/types'
 
 import Sidebar from '@/components/Sidebar.vue'
 
@@ -480,21 +497,65 @@ const molstarRef =
 
 
 /* =========================================================
- * Result
+ * Result (真实 API：GET /api/results/{id})
  * ========================================================= */
 
-const result = computed(() => {
+const apiResult =
+  ref<PredictionResult | null>(null)
+
+const resultLoading =
+  ref(false)
+
+const resultError =
+  ref('')
+
+async function loadResult(): Promise<void> {
 
   const id =
     route.query.id as string
 
-  return (
-    mockResults.find(
-      item => item.id === id
-    ) || null
-  )
+  if (!id) {
 
-})
+    apiResult.value = null
+    resultError.value = ''
+    resultLoading.value = false
+    return
+  }
+
+  resultLoading.value = true
+  resultError.value = ''
+
+  try {
+
+    apiResult.value =
+      await resultApi.getResultDetail(id)
+
+  } catch (err) {
+
+    apiResult.value = null
+    resultError.value =
+      err instanceof Error
+        ? err.message
+        : '加载预测结果失败'
+
+  } finally {
+
+    resultLoading.value = false
+  }
+
+}
+
+watch(
+  () => route.query.id,
+
+  () => {
+    loadResult()
+  },
+
+  {
+    immediate: true,
+  }
+)
 
 
 /* =========================================================
@@ -504,8 +565,8 @@ const result = computed(() => {
 const targetName = computed(() => {
 
   return (
+    apiResult.value?.targetName ||
     (route.query.targetName as string) ||
-    result.value?.targetName ||
     'Unknown'
   )
 
@@ -515,8 +576,8 @@ const targetName = computed(() => {
 const targetId = computed(() => {
 
   return (
+    apiResult.value?.targetId ||
     (route.query.targetId as string) ||
-    result.value?.targetId ||
     '-'
   )
 
@@ -699,24 +760,38 @@ watch(
 
 const bindingAffinity = computed(() => {
 
+  const apiValue =
+    apiResult.value?.bindingAffinity
+
+  if (apiValue !== null && apiValue !== undefined) {
+    return apiValue
+  }
+
   const value =
     route.query.bindingAffinity as string
 
   return value
     ? parseFloat(value)
-    : result.value?.bindingAffinity ?? null
+    : null
 
 })
 
 
 const confidenceScore = computed(() => {
 
+  const apiValue =
+    apiResult.value?.confidenceScore
+
+  if (apiValue !== null && apiValue !== undefined) {
+    return apiValue
+  }
+
   const value =
     route.query.confidenceScore as string
 
   return value
     ? parseFloat(value)
-    : result.value?.confidenceScore ?? 0
+    : 0
 
 })
 
@@ -724,8 +799,8 @@ const confidenceScore = computed(() => {
 const confidenceLevel = computed(() => {
 
   return (
+    apiResult.value?.confidenceLevel ||
     (route.query.confidenceLevel as string) ||
-    result.value?.confidenceLevel ||
     'medium'
   )
 
@@ -734,7 +809,7 @@ const confidenceLevel = computed(() => {
 
 const interactions = computed(() => {
 
-  return result.value?.interactions || []
+  return apiResult.value?.interactions || []
 
 })
 
@@ -1452,6 +1527,21 @@ const getInteractionTypeName =
 
 .visualization__info-title-icon {
   font-size: 16px;
+}
+
+.visualization__info-hint {
+  margin-bottom: $spacing-md;
+  font-size: 10px;
+  color: $text-muted;
+  text-align: center;
+  padding: $spacing-xs;
+  border-radius: $border-radius-sm;
+  background: $bg-secondary;
+
+  &--error {
+    color: $error-color;
+    background: rgba(239, 68, 68, 0.08);
+  }
 }
 
 .visualization__info-content {

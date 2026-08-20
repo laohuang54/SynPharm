@@ -7,7 +7,7 @@
           <h1 class="tk__title">任务管理</h1>
           <p class="tk__subtitle">查看和管理所有预测任务</p>
         </div>
-        <button class="tk__btn tk__btn--primary">创建任务</button>
+        <button class="tk__btn tk__btn--primary" @click="goCreate">创建任务</button>
       </header>
 
       <div class="tk__tabs">
@@ -65,9 +65,12 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { taskApi } from '@/api/predict'
 import Sidebar from '@/components/Sidebar.vue'
 import type { Task } from '@/types'
+
+const router = useRouter()
 
 const activeTab = ref('all')
 const tasks = ref<Task[]>([])
@@ -87,6 +90,10 @@ const loadTasks = async () => {
 }
 
 onMounted(loadTasks)
+
+const goCreate = () => {
+  router.push('/predict')
+}
 
 const tabs = computed(() => [
   { value: 'all', label: '全部', count: tasks.value.length },

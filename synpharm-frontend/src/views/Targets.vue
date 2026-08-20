@@ -104,9 +104,12 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { mockTargets } from '@/data/mockResults'
 import Sidebar from '@/components/Sidebar.vue'
 import type { Target } from '@/types'
+
+const router = useRouter()
 
 const searchQuery = ref('')
 const filterType = ref('all')
@@ -169,8 +172,14 @@ const selectTarget = (target: Target) => {
   selectedTarget.value = target
 }
 
-const useTarget = (_target: Target) => {
-  window.open('/predict', '_self')
+const useTarget = (target: Target) => {
+  router.push({
+    path: '/predict',
+    query: {
+      targetId: target.uniprotId,
+      targetName: target.name
+    }
+  })
 }
 </script>
 
