@@ -252,7 +252,15 @@ const loadStats = async () => {
   }
 }
 
-onMounted(loadStats)
+onMounted(async () => {
+  try {
+    await authStore.refreshUser()
+  } catch (error) {
+    console.error('刷新用户信息失败', error)
+  }
+
+  await loadStats()
+})
 
 // ================= 成功提示 =================
 const successMessage = ref('')

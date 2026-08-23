@@ -66,6 +66,28 @@ export interface Task {
   updatedAt?: string
 }
 
+/**
+ * 任务详情（对应后端 GET /api/tasks/{id} 返回的 PredictTask 实体）。
+ * 字段与后端 PredictTask 对齐，全部可选以兼容未返回的字段。
+ */
+export interface TaskDetail {
+  id: number | string
+  taskNo?: string
+  userId?: number | string
+  /** 预测/算法类型（dti/ppi/ddi） */
+  predictType?: string
+  inputType?: string
+  inputValue?: string
+  fileUrl?: string
+  status?: string
+  progress?: number
+  errorMessage?: string
+  aiTaskId?: string
+  createdAt?: string
+  startedAt?: string
+  completedAt?: string
+}
+
 export interface ValidationResult {
   inputType: string
   inputValue: string

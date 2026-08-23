@@ -58,6 +58,11 @@ export const predictApi = {
 
   predictDDI(data: DDIPredictRequest): Promise<PredictResultResponse> {
     return request.post<PredictResultResponse>('/api/predict/ddi', data)
+  },
+
+  /** 获取当前用户的预测历史列表（按创建时间倒序） */
+  getPredictHistory(): Promise<PredictResultResponse[]> {
+    return request.get<PredictResultResponse[]>('/api/predict/history')
   }
 }
 

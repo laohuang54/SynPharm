@@ -112,6 +112,7 @@ const goToVisualization = () => {
     },
   })
 }
+console.log('ResultDetail加载了')
 </script>
 
 <style lang="scss" scoped>
