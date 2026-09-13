@@ -25,10 +25,18 @@ public class Result<T> {
 
     /** 响应状态码 */
     private Integer code;
-    
+
+    /**
+     * 字符串错误码（修复方案 5.5 新增）
+     *
+     * <p>与整数 code 并存：整数 code 保持全站既有契约不变（前端依赖 code!=200 判断），
+     * 字符串错误码仅预测模块等新功能使用（如 SEQUENCE_TOO_SHORT），成功时为 null。
+     */
+    private String errorCode;
+
     /** 响应消息 */
     private String message;
-    
+
     /** 响应数据 */
     private T data;
 
@@ -76,8 +84,25 @@ public class Result<T> {
     }
 
     /**
+     * 失败响应（带字符串错误码）
+     *
+     * @param code 整数错误码
+     * @param errorCode 字符串错误码（如 SEQUENCE_TOO_SHORT）
+     * @param message 错误消息
+     * @param <T> 数据类型
+     * @return 失败响应
+     */
+    public static <T> Result<T> error(Integer code, String errorCode, String message) {
+        return Result.<T>builder()
+                .code(code)
+                .errorCode(errorCode)
+                .message(message)
+                .build();
+    }
+
+    /**
      * 失败响应（默认错误码）
-     * 
+     *
      * @param message 错误消息
      * @param <T> 数据类型
      * @return 失败响应

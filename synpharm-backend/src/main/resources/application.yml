@@ -78,6 +78,21 @@ fastapi:
   api-key: ${FASTAPI_API_KEY:}
   timeout-single: ${FASTAPI_TIMEOUT_SINGLE:30000}
   timeout-batch: ${FASTAPI_TIMEOUT_BATCH:60000}
+  # 算法引擎健康检查（GET /health/）：超时、有限重试次数、熔断阈值与开启时长
+  health-timeout: ${FASTAPI_HEALTH_TIMEOUT:5000}
+  health-retries: ${FASTAPI_HEALTH_RETRIES:2}
+  health-breaker-threshold: ${FASTAPI_HEALTH_BREAKER_THRESHOLD:5}
+  health-breaker-open-ms: ${FASTAPI_HEALTH_BREAKER_OPEN_MS:30000}
+
+# 输入解析（修复方案 5.4）：UniProt / RCSB PDB 外部数据源与缓存
+prediction:
+  resolver:
+    uniprot-base-url: ${UNIPROT_BASE_URL:https://rest.uniprot.org}
+    rcsb-base-url: ${RCSB_BASE_URL:https://data.rcsb.org}
+    connect-timeout-ms: ${RESOLVER_CONNECT_TIMEOUT:3000}
+    read-timeout-ms: ${RESOLVER_READ_TIMEOUT:5000}
+    cache-ttl-hours: ${RESOLVER_CACHE_TTL_HOURS:24}
+    negative-cache-ttl-minutes: ${RESOLVER_NEGATIVE_CACHE_TTL_MINUTES:10}
 
 app:
   name: SynPharm

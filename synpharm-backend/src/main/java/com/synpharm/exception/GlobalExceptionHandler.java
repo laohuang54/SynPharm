@@ -63,6 +63,33 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * 处理预测模块业务异常（修复方案 5.5 新增）
+     * <p>携带字符串错误码的预测异常（如 SEQUENCE_TOO_SHORT）。
+     * HTTP 状态码沿用业务异常惯例返回 200，错误码通过 errorCode 字段返回。
+     */
+    @ExceptionHandler(PredictionException.class)
+    public Result<?> handlePredictionException(PredictionException e) {
+        log.warn("预测异常: errorCode={}, message={}", e.getErrorCode().name(), e.getMessage());
+        return Result.error(ErrorCode.PREDICT_ERROR.getCode(), e.getErrorCode().name(), e.getMessage());
+    }
+
+    /**
+     * 处理管道执行异常（修复方案 5.5 新增）
+     * <p>管道分阶段抛出的异常映射为字符串错误码：
+     * parse/format → INPUT_RESOLVE_FAILED，execute → FASTAPI_UNAVAILABLE。
+     */
+    @ExceptionHandler(PipelineException.class)
+    public Result<?> handlePipelineException(PipelineException e) {
+        PredictionErrorCode errorCode = switch (e.getStage()) {
+            case "parse", "format" -> PredictionErrorCode.INPUT_RESOLVE_FAILED;
+            case "execute" -> PredictionErrorCode.FASTAPI_UNAVAILABLE;
+            default -> PredictionErrorCode.INPUT_RESOLVE_FAILED;
+        };
+        log.warn("管道异常: stage={}, errorCode={}, message={}", e.getStage(), errorCode.name(), e.getMessage());
+        return Result.error(ErrorCode.PREDICT_ERROR.getCode(), errorCode.name(), e.getMessage());
+    }
+
+    /**
      * 处理所有未捕获的异常
      * <p>兜底处理，防止异常直接抛给前端。HTTP状态码返回500。
      */

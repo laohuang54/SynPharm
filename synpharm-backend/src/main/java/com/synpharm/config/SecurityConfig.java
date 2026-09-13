@@ -69,6 +69,7 @@ public class SecurityConfig {
                     "/api/auth/captcha/send",  // 发送验证码
                     "/api/auth/password/reset",// 忘记密码
                     "/actuator/health",        // 健康检查（Docker healthcheck 使用）
+                    "/api/system/algorithm-health", // 算法引擎健康检查（监控探测，修复方案 5.7）
                     "/swagger-ui/**",          // Swagger UI
                     "/v3/api-docs/**",         // Swagger API文档
                     "/doc.html",               // Knife4j文档

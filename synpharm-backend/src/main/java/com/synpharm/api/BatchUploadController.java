@@ -50,4 +50,16 @@ public class BatchUploadController {
         Long userId = jwtUtils.getUserIdFromToken(token.replace("Bearer ", ""));
         return batchProcessService.downloadBatch(batchId, userId);
     }
+
+    @GetMapping("/{batchId}/items")
+    @Operation(summary = "查询批量任务明细", description = "分页查询批量任务每一行的处理状态（修复方案 5.6）")
+    public Result<?> getBatchItems(
+            @RequestHeader("Authorization") String token,
+            @PathVariable String batchId,
+            @RequestParam(defaultValue = "1") Integer page,
+            @RequestParam(defaultValue = "10") Integer pageSize,
+            @RequestParam(required = false) Integer status) {
+        Long userId = jwtUtils.getUserIdFromToken(token.replace("Bearer ", ""));
+        return Result.success(batchProcessService.getBatchItems(batchId, userId, page, pageSize, status));
+    }
 }

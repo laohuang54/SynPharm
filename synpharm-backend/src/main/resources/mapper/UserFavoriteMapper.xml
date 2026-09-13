@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.synpharm.repository.mapper.UserFavoriteMapper">
+
+    <!-- 物理删除（修复方案 5.7）：唯一键 uk_user_result 存在，逻辑删除会导致重复收藏撞键 -->
+    <delete id="deletePhysically">
+        DELETE FROM user_favorite WHERE id = #{id}
+    </delete>
+
+</mapper>

@@ -82,7 +82,7 @@ public class DataPipelineFactory implements PipelineFactory {
         
         ParsedInput parsedInput;
         try {
-            parsedInput = parser.parse(inputValue, fileUrl);
+            parsedInput = parser.parse(inputValue, fileUrl, algoType.getCode());
         } catch (Exception e) {
             throw PipelineException.parse(e.getMessage(), e);
         }
@@ -140,7 +140,7 @@ public class DataPipelineFactory implements PipelineFactory {
         List<ParsedInput> parsedInputs = new ArrayList<>();
         for (String input : inputs) {
             try {
-                parsedInputs.add(parser.parse(input, null));
+                parsedInputs.add(parser.parse(input, null, algoType.getCode()));
             } catch (Exception e) {
                 log.warn("解析输入失败: {}", input, e);
             }
