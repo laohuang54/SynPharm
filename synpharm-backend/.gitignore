@@ -1,0 +1,31 @@
+# Java 编译产物
+target/
+*.jar
+*.war
+*.class
+build/
+out/
+
+# IDEA 配置文件（所有人IDE不一样，不要提交）
+.idea/
+*.iml
+*.iws
+*.ipr
+.DS_Store
+
+# 日志文件
+logs/
+log/
+*.log
+
+# 上传文件、临时生成结果
+uploads/
+results/
+
+# Docker 相关（不用提交到Git）
+Dockerfile
+.dockerignore
+
+# 重点：忽略每个人本地私有配置（解决数据库反复修改痛点）
+src/main/resources/application-local.yml
+src/main/resources/application-*.local.yml

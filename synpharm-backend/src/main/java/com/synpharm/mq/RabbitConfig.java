@@ -18,11 +18,18 @@ import org.springframework.context.annotation.Configuration;
  * 业务队列 batch.task.queue 声明死信（x-dead-letter-*），
  * 处理失败的消息自动进入 batch.task.dlq。
  *
+ * <p>【临时关闭】RabbitMQ 监听已暂时停用：
+ * <ul>
+ *   <li>@EnableRabbit 已注释，Spring Boot 不再自动创建 RabbitListener 容器及连接</li>
+ *   <li>如需恢复，移除本类 @EnableRabbit 的注释，并同时取消 BatchTaskConsumer 中 @RabbitListener 的注释，
+ *       然后确保 application.yml 配置了 spring.rabbitmq.* 连接参数并启动 RabbitMQ 服务</li>
+ * </ul>
+ *
  * @author SynPharm Team
  * @version 1.0.0
  */
 @Configuration
-@EnableRabbit
+// @EnableRabbit // TODO 暂时关闭 RabbitMQ 监听：如需恢复，取消本行注释，并恢复 BatchTaskConsumer 的 @RabbitListener
 public class RabbitConfig {
 
     public static final String BATCH_EXCHANGE = "synpharm.exchange";

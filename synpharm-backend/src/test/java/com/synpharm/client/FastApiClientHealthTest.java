@@ -1,5 +1,6 @@
 package com.synpharm.client;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.synpharm.dto.response.AlgorithmHealthResponse;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
@@ -30,7 +31,7 @@ class FastApiClientHealthTest {
         ReflectionTestUtils.setField(circuitBreaker, "openMillis", 60000L);
 
         WebClient webClient = WebClient.builder().baseUrl(server.url("/").toString()).build();
-        client = new FastApiClient(webClient, Duration.ofSeconds(5), Duration.ofSeconds(5), circuitBreaker);
+        client = new FastApiClient(webClient, Duration.ofSeconds(5), Duration.ofSeconds(5), circuitBreaker, new ObjectMapper());
         ReflectionTestUtils.setField(client, "healthTimeoutMs", 2000L);
         ReflectionTestUtils.setField(client, "healthRetries", 2);
     }

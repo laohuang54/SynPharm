@@ -272,6 +272,24 @@ export const useAuthStore = defineStore('auth', {
         this.user.nickname = nickname
         localStorage.setItem(STORAGE_KEY.USER, JSON.stringify(this.user))
       }
+    },
+
+    async refreshUser() {
+      try {
+        const user = await authApi.getProfile()
+
+        this.user = user
+
+        localStorage.setItem(
+          STORAGE_KEY.USER,
+          JSON.stringify(user)
+        )
+
+        return user
+      } catch (error) {
+        console.error('获取用户信息失败:', error)
+        throw error
+      }
     }
   }
 })

@@ -7,7 +7,7 @@
           <h1 class="tk__title">任务管理</h1>
           <p class="tk__subtitle">查看和管理所有预测任务</p>
         </div>
-        <button class="tk__btn tk__btn--primary">创建任务</button>
+        <button class="tk__btn tk__btn--primary" @click="goCreate">创建任务</button>
       </header>
 
       <div class="tk__tabs">
@@ -47,8 +47,8 @@
               <span class="tk__date">{{ formatDate(task.createdAt) }}</span>
               <div class="tk__actions">
                 <button v-if="task.status === 'running'" class="tk__action" @click="handlePause(task)">暂停</button>
-                <button v-if="task.status === 'completed'" class="tk__action" @click="handleView(task)">查看结果</button>
-                <button v-if="task.status !== 'running'" class="tk__action tk__action--danger" @click="handleDelete(task)">删除</button>
+                <button class="tk__action" @click="handleView(task)">查看任务</button>
+                <button v-if="task.status === 'running' || task.status === 'pending'" class="tk__action tk__action--danger" @click="handleCancel(task)">取消任务</button>
               </div>
             </div>
           </div>
@@ -65,9 +65,13 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { taskApi } from '@/api/predict'
+import { useRouter } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { getTasks, cancelTask } from '@/api/task'
 import Sidebar from '@/components/Sidebar.vue'
 import type { Task } from '@/types'
+
+const router = useRouter()
 
 const activeTab = ref('all')
 const tasks = ref<Task[]>([])
@@ -78,7 +82,7 @@ const loadTasks = async () => {
   loading.value = true
   loadError.value = ''
   try {
-    tasks.value = await taskApi.getTaskList() as unknown as Task[]
+    tasks.value = await getTasks()
   } catch (error: unknown) {
     loadError.value = error instanceof Error ? error.message : '加载任务失败'
   } finally {
@@ -87,6 +91,10 @@ const loadTasks = async () => {
 }
 
 onMounted(loadTasks)
+
+const goCreate = () => {
+  router.push('/predict')
+}
 
 const tabs = computed(() => [
   { value: 'all', label: '全部', count: tasks.value.length },
@@ -149,11 +157,27 @@ const handlePause = (task: Task) => {
 }
 
 const handleView = (task: Task) => {
-  console.log('查看结果:', task.id)
+  router.push(`/tasks/${task.id}`)
 }
 
-const handleDelete = (task: Task) => {
-  console.log('删除任务:', task.id)
+const handleCancel = async (task: Task) => {
+  try {
+    await ElMessageBox.confirm('确定取消该预测任务吗？', '提示', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+  } catch {
+    return
+  }
+
+  try {
+    await cancelTask(task.id)
+    ElMessage.success('任务取消成功')
+    await loadTasks()
+  } catch (error: unknown) {
+    ElMessage.error(error instanceof Error ? error.message : '取消任务失败')
+  }
 }
 </script>
 

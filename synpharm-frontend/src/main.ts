@@ -10,10 +10,12 @@ const app = createApp(App)
 const pinia = createPinia()
 
 app.use(pinia)
-app.use(router)
-app.use(ElementPlus)
 
+// 关键修复：在安装 router 之前先初始化登录态，避免首次导航时状态未就绪
 const authStore = useAuthStore()
 authStore.init()
+
+app.use(router)
+app.use(ElementPlus)
 
 app.mount('#app')

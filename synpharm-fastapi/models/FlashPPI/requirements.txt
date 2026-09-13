@@ -1,0 +1,8 @@
+# FlashPPI 推理所需依赖（SynPharm 算法引擎集成时叠加到 synpharm-fastapi/requirements.txt）
+torch>=2.0
+transformers>=4.40
+einops>=0.7
+numpy>=1.24
+
+# 可选：GPU 加速（需单独编译）
+# flash-attn

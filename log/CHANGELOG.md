@@ -1,5 +1,87 @@
 # 更新日志
 
+## [v3.2.0] - 2026-08-23
+
+### 今日主题
+
+完成 SynPharm 前后端全面联调，核心业务模块接入真实 API，预测业务闭环完成。
+
+### 新增功能
+
+1. **预测结果管理完善**
+   - 接入真实接口 `GET /api/results`、`GET /api/results/{id}`
+   - 结果详情由 Mock 改为真实后端数据
+   - 支持展示算法类型、靶点、SMILES、结合亲和力、置信度、交互信息
+
+2. **预测结果删除**
+   - 接入 `DELETE /api/results/{id}`
+   - 前端结果列表增加删除操作
+   - 删除成功刷新列表
+   - 说明设计逻辑：`PredictTask` 与 `PredictResult` 分离，删除结果不删除任务记录
+
+3. **预测历史**
+   - 新增 `GET /api/predict/history`
+   - `Predict.vue` 增加预测历史 Tab
+   - 展示用户历史预测记录
+
+4. **批量预测联调**
+   - 完成 `POST /api/batch/upload`、`GET /api/batch/status/{batchId}`、`GET /api/batch/download/{batchId}`
+   - 验证上传、任务创建、状态查询流程
+   - 状态 SUCCESS 测试通过
+
+5. **Dashboard 统计修复**
+   - Dashboard 已接入真实统计数据
+   - 移除统计页面 Mock 依赖
+
+### 修复
+
+- `Predict.vue`、`Results.vue`、`Tasks.vue` 核心页面去 Mock
+- DTI/PPI/DDI 字段兼容修复
+- `bindingAffinity` 空值保护
+- `Visualization.vue` 改为通过 `GET /api/results/{id}` 获取真实数据
+
+### JSON 契约对齐（接口数据流通）
+
+- 预测结果字段统一：`id`/`algoType`/`targetId`/`targetName`/`ligandSmiles`/`bindingAffinity`/`confidenceScore`/`confidenceLevel`/`interactions`/`createdAt`
+- 前端 API 与后端响应保持一致
+
+### 测试验证
+
+已通过：
+- `POST /api/auth/login`
+- `GET /api/users/profile`
+- `PUT /api/users/profile`
+- `GET /api/tasks`
+- `GET /api/results`
+- `GET /api/results/{id}`
+- `DELETE /api/results/{id}`
+- `GET /api/predict/history`
+- `POST /api/batch/upload`
+- `GET /api/batch/status/{batchId}`
+
+### 待办（未完成）
+
+1. **批量下载问题**
+   - `GET /api/batch/download/{batchId}`
+   - 当前 CSV 只有表头，没有数据
+   - 需要后端检查批量结果落库和查询关联
+
+2. **邮箱验证码**
+   - `POST /api/auth/captcha/send`
+   - 当前提示邮件服务未配置
+   - 影响注册和忘记密码
+
+3. **靶点库**
+   - `Targets` 页面仍使用 Mock 数据
+   - 待接入真实 `GET /api/targets`、`GET /api/targets/{id}`
+
+4. **保存结果按钮**
+   - 当前预测完成后后端已自动保存 `predict_result`
+   - 按钮无实际业务
+   - 需要删除或改造成收藏功能
+
+---
+
 ## [v3.1.0] - 2026-08-07
 
 ### 今日主题

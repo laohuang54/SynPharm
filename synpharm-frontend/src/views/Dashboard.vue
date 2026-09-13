@@ -10,6 +10,9 @@
         <span class="db__date">{{ currentDate }}</span>
       </header>
 
+      <div v-if="loadError" class="db__error">{{ loadError }}</div>
+      <div v-else-if="loading" class="db__loading">加载中…</div>
+
       <section class="db__stats">
         <div class="db__stat">
           <span class="db__stat-icon">📊</span>
@@ -50,8 +53,8 @@
           <div class="db__tasks">
             <div v-for="task in recentTasks" :key="task.id" class="db__task">
               <div class="db__task-info">
-                <span class="db__task-name">{{ task.name || task.id }}</span>
-                <span class="db__task-type">{{ task.type }}</span>
+                <span class="db__task-name">{{ task.name || task.taskNo || task.id }}</span>
+                <span class="db__task-type">{{ task.predictType || task.type }}</span>
               </div>
               <span class="db__status" :class="`db__status--${task.status}`">{{ getStatusText(task.status) }}</span>
             </div>
@@ -79,16 +82,41 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { mockTasks, mockResults } from '@/data/mockResults'
+import { taskApi, resultApi } from '@/api/predict'
 import Sidebar from '@/components/Sidebar.vue'
 import ResultCard from '@/components/ResultCard.vue'
 import type { PredictionResult, Task } from '@/types'
 
 const authStore = useAuthStore()
 const router = useRouter()
+
+const tasks = ref<Task[]>([])
+const results = ref<PredictionResult[]>([])
+const loading = ref(false)
+const loadError = ref('')
+
+async function loadDashboard(): Promise<void> {
+  loading.value = true
+  loadError.value = ''
+
+  try {
+    const [taskList, resultPage] = await Promise.all([
+      taskApi.getTaskList(),
+      resultApi.getResultList(1, 100),
+    ])
+    tasks.value = taskList
+    results.value = resultPage.list
+  } catch (err) {
+    loadError.value = err instanceof Error ? err.message : '加载仪表盘数据失败'
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(loadDashboard)
 
 const currentDate = computed(() => {
   return new Date().toLocaleDateString('zh-CN', {
@@ -99,11 +127,11 @@ const currentDate = computed(() => {
 })
 
 const stats = computed(() => {
-  const total = mockTasks.length
-  const completed = mockTasks.filter((t: Task) => t.status === 'completed').length
-  const running = mockTasks.filter((t: Task) => t.status === 'running').length
-  const avgConfidence = mockResults.length > 0 
-    ? Math.round(mockResults.reduce((sum: number, r: PredictionResult) => sum + r.confidenceScore, 0) / mockResults.length * 100)
+  const total = tasks.value.length
+  const completed = tasks.value.filter((t: Task) => t.status === 'completed').length
+  const running = tasks.value.filter((t: Task) => t.status === 'running').length
+  const avgConfidence = results.value.length > 0
+    ? Math.round(results.value.reduce((sum: number, r: PredictionResult) => sum + (r.confidenceScore ?? 0), 0) / results.value.length * 100)
     : 0
   
   return {
@@ -115,13 +143,13 @@ const stats = computed(() => {
 })
 
 const recentTasks = computed(() => {
-  return [...mockTasks].sort((a, b) => 
+  return [...tasks.value].sort((a, b) =>
     new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   ).slice(0, 5)
 })
 
 const recentResults = computed(() => {
-  return [...mockResults].sort((a, b) => 
+  return [...results.value].sort((a, b) =>
     new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   ).slice(0, 2)
 })
@@ -139,14 +167,6 @@ const getStatusText = (status: string): string => {
 const handleResultDetail = (result: PredictionResult) => {
   router.push({
     path: '/result/' + String(result.id),
-    query: {
-      id: String(result.id),
-      targetId: result.targetId || '',
-      targetName: result.targetName || '',
-      bindingAffinity: String(result.bindingAffinity ?? ''),
-      confidenceScore: String(result.confidenceScore ?? ''),
-      confidenceLevel: result.confidenceLevel || '',
-    },
   })
 }
 
@@ -399,6 +419,25 @@ const handleResult3D = (result: PredictionResult) => {
   background: $bg-tertiary;
   padding: $spacing-xs $spacing-md;
   border-radius: 999px;
+}
+
+.db__loading,
+.db__error {
+  margin-bottom: $spacing-lg;
+  padding: $spacing-sm $spacing-md;
+  border-radius: $border-radius-md;
+  font-size: $font-size-sm;
+  text-align: center;
+}
+
+.db__loading {
+  background: $bg-tertiary;
+  color: $text-muted;
+}
+
+.db__error {
+  background: rgba(239, 68, 68, 0.08);
+  color: $error-color;
 }
 
 .db__stats {

@@ -9,14 +9,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue'
-import { useAuthStore } from '@/stores/auth'
-
-const authStore = useAuthStore()
-
-onMounted(() => {
-  authStore.init()
-})
+// authStore.init() 已在 main.ts 中（router 安装前）完成，避免重复初始化
 </script>
 
 <style lang="scss">

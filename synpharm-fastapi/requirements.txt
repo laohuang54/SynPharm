@@ -7,3 +7,9 @@ numpy==1.26.0
 pandas==2.1.0
 scikit-learn==1.3.0
 python-multipart==0.0.6
+# 三个算法真实推理所需依赖：
+#   DDI-LLM / KAN-MoDTI 需要 rdkit（分子图 / 摩根指纹）
+#   FlashPPI 需要 transformers + einops（trust_remote_code 加载 gLM2 骨架）
+rdkit
+transformers>=4.40
+einops>=0.7

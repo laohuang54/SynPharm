@@ -18,6 +18,7 @@
       <div class="pc__tabs">
         <button class="pc__tab" :class="{ 'pc__tab--active': mode === 'single' }" @click="mode = 'single'">单条预测</button>
         <button class="pc__tab" :class="{ 'pc__tab--active': mode === 'batch' }" @click="mode = 'batch'">批量预测</button>
+        <button class="pc__tab" :class="{ 'pc__tab--active': mode === 'history' }" @click="mode = 'history'">预测历史</button>
       </div>
 
       <!-- ===== 单条预测 ===== -->
@@ -37,6 +38,10 @@
           </div>
 
           <p class="pc__form-subtitle">{{ getFormSubtitle() }}</p>
+
+          <div v-if="prefilledTargetName" class="pc__target-tip">
+            🎯 已选择靶点：<b>{{ prefilledTargetName }}</b>
+          </div>
 
           <div class="pc__form">
             <div class="pc__input-block">
@@ -182,6 +187,60 @@
         </div>
       </section>
 
+      <!-- ===== 预测历史 ===== -->
+      <section v-show="mode === 'history'" class="pc__panel">
+        <div class="pc__card">
+          <div class="pc__card-head">
+            <h3 class="pc__card-title">预测历史</h3>
+            <p class="pc__card-sub">查看当前用户的近期预测记录</p>
+          </div>
+
+          <div v-if="historyLoading" class="pc__state">加载中...</div>
+          <div v-else-if="historyError" class="pc__state pc__state--error">{{ historyError }}</div>
+          <div v-else-if="historyList.length === 0" class="pc__state">暂无预测历史</div>
+
+          <template v-else>
+            <div v-for="(item, idx) in historyList" :key="idx" class="pc__history-item">
+              <div class="pc__history-head">
+                <span class="pc__history-type">{{ getAlgoTypeText(item.algoType) }}</span>
+                <span class="pc__history-time">{{ item.createdAt ? formatTime(item.createdAt) : '-' }}</span>
+              </div>
+
+              <div class="pc__history-body">
+                <div class="pc__history-field">
+                  <span class="pc__history-label">靶点名称</span>
+                  <span class="pc__history-value">{{ item.targetName || '-' }}</span>
+                </div>
+                <div v-if="item.ligandSmiles" class="pc__history-field">
+                  <span class="pc__history-label">配体 SMILES</span>
+                  <span class="pc__history-value pc__history-value--smiles">{{ item.ligandSmiles }}</span>
+                </div>
+                <div v-if="isDti(item.algoType)" class="pc__history-field">
+                  <span class="pc__history-label">结合亲和力</span>
+                  <span class="pc__history-value">
+                    {{ item.bindingAffinity != null ? item.bindingAffinity.toFixed(2) + ' kcal/mol' : '-' }}
+                  </span>
+                </div>
+                <div class="pc__history-field">
+                  <span class="pc__history-label">置信度</span>
+                  <span class="pc__history-value">
+                    {{ Math.round((item.confidenceScore ?? 0) * 100) }}%
+                    <span v-if="item.confidenceLevel" class="pc__history-confidence" :style="{ color: getConfidenceColor(item.confidenceScore ?? 0) }">
+                      {{ getConfidenceText(item.confidenceLevel || '') }}
+                    </span>
+                  </span>
+                </div>
+              </div>
+
+              <div class="pc__history-actions">
+                <button class="pc__btn pc__btn--secondary" @click="goHistoryDetail(item)">查看详情</button>
+                <button class="pc__btn pc__btn--primary" @click="goHistoryVisualization(item)">跳转3D</button>
+              </div>
+            </div>
+          </template>
+        </div>
+      </section>
+
       <!-- ===== 预测结果 ===== -->
       <section v-if="predictionResult" class="pc__panel">
         <div class="pc__card">
@@ -224,9 +283,17 @@
                 <span class="pc__detail-label">靶点 ID</span>
                 <span class="pc__detail-val">{{ predictionResult.targetId }}</span>
               </div>
-              <div class="pc__detail pc__detail--accent">
+              <div
+                v-if="selectedType === 'dti'"
+                class="pc__detail pc__detail--accent"
+              >
                 <span class="pc__detail-label">结合亲和力</span>
-                <span class="pc__detail-val">{{ predictionResult.bindingAffinity.toFixed(2) }} <small>kcal/mol</small></span>
+                <span class="pc__detail-val">
+                  {{ predictionResult.bindingAffinity != null
+                    ? predictionResult.bindingAffinity.toFixed(2)
+                    : '-' }}
+                  <small v-if="predictionResult.bindingAffinity != null">kcal/mol</small>
+                </span>
               </div>
             </div>
           </div>
@@ -274,15 +341,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onUnmounted } from 'vue'
-import { useRouter } from 'vue-router'
-import { predictApi, batchApi, type BatchStatus } from '@/api/predict'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
+import { predictApi, batchApi, type BatchStatus, type PredictResultResponse } from '@/api/predict'
 import Sidebar from '@/components/Sidebar.vue'
 import type { PredictionResult } from '@/types'
 
 const selectedType = ref<'ppi' | 'dti' | 'ddi'>('dti')
 const selectedInputType = ref<'pdb' | 'uniprot' | 'smiles' | 'csv'>('smiles')
-const mode = ref<'single' | 'batch'>('single')
+const mode = ref<'single' | 'batch' | 'history'>('single')
 
 const firstInputValue = ref('')
 const secondInputValue = ref('')
@@ -297,6 +364,24 @@ const isLoading = ref(false)
 const predictionResult = ref<PredictionResult | null>(null)
 const predictError = ref('')
 const router = useRouter()
+const route = useRoute()
+
+// 从靶点库跳转进入时，预填靶点信息
+const prefilledTargetName = ref('')
+
+const applyTargetFromQuery = () => {
+  const targetId = route.query.targetId
+  const targetName = route.query.targetName
+  if (targetId) {
+    selectedType.value = 'dti'
+    selectedInputType.value = 'uniprot'
+    secondInputValue.value = String(targetId)
+    secondInputError.value = ''
+    prefilledTargetName.value = targetName ? String(targetName) : ''
+  }
+}
+
+onMounted(applyTargetFromQuery)
 
 const predictionTypes: Array<{ value: 'ppi' | 'dti' | 'ddi', label: string, icon: string, description: string }> = [
   { value: 'ppi', label: 'PPI预测', icon: '🔬', description: '蛋白质-蛋白质相互作用' },
@@ -620,6 +705,58 @@ const goToVisualization = () => {
       id: String(predictionResult.value.id),
       targetName: predictionResult.value.targetName,
       targetId: predictionResult.value.targetId,
+    },
+  })
+}
+
+// ================= 预测历史 =================
+const historyList = ref<PredictResultResponse[]>([])
+const historyLoading = ref(false)
+const historyError = ref('')
+
+const loadHistory = async () => {
+  historyLoading.value = true
+  historyError.value = ''
+  try {
+    historyList.value = await predictApi.getPredictHistory()
+  } catch (error: unknown) {
+    historyError.value = error instanceof Error ? error.message : '加载预测历史失败'
+  } finally {
+    historyLoading.value = false
+  }
+}
+
+watch(mode, (val) => {
+  if (val === 'history') {
+    loadHistory()
+  }
+})
+
+const getAlgoTypeText = (algoType?: string): string => {
+  const texts: Record<string, string> = {
+    dti: '药物-靶点 (DTI)',
+    ppi: '蛋白-蛋白 (PPI)',
+    ddi: '药物-药物 (DDI)'
+  }
+  const key = (algoType || '').toLowerCase()
+  return texts[key] || algoType || '-'
+}
+
+const isDti = (algoType?: string): boolean => {
+  return (algoType || '').toLowerCase() === 'dti'
+}
+
+const goHistoryDetail = (item: PredictResultResponse) => {
+  router.push('/result/' + String(item.id ?? ''))
+}
+
+const goHistoryVisualization = (item: PredictResultResponse) => {
+  router.push({
+    path: '/visualization',
+    query: {
+      id: String(item.id ?? ''),
+      targetName: item.targetName ?? '',
+      targetId: item.targetId ?? '',
     },
   })
 }
@@ -1673,6 +1810,17 @@ const goToVisualization = () => {
   color: $text-muted;
 }
 
+.pc__target-tip {
+  margin: $spacing-md 0;
+  padding: $spacing-sm $spacing-md;
+  background: rgba(59, 130, 246, 0.08);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  border-radius: $border-radius-md;
+  font-size: $font-size-sm;
+  color: $accent-color;
+  b { font-weight: 600; }
+}
+
 /* ---------- 输入区 ---------- */
 .pc__form {
   display: grid;
@@ -2193,5 +2341,91 @@ const goToVisualization = () => {
   margin-top: $spacing-lg;
   padding-top: $spacing-lg;
   border-top: 1px solid $border-light;
+}
+
+/* ---------- 预测历史 ---------- */
+.pc__state {
+  padding: $spacing-2xl;
+  text-align: center;
+  color: $text-muted;
+  font-size: $font-size-base;
+  &--error { color: $error-color; }
+}
+
+.pc__history-item {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-md;
+  padding: $spacing-lg;
+  border: 1px solid $border-color;
+  border-radius: $border-radius-md;
+  background: $bg-primary;
+  margin-bottom: $spacing-md;
+  &:last-child { margin-bottom: 0; }
+}
+
+.pc__history-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.pc__history-type {
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(59, 130, 246, 0.1);
+  color: $accent-color;
+  font-size: $font-size-xs;
+  font-weight: 600;
+}
+
+.pc__history-time {
+  font-size: $font-size-xs;
+  color: $text-muted;
+}
+
+.pc__history-body {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-sm;
+}
+
+.pc__history-field {
+  display: flex;
+  gap: $spacing-md;
+  align-items: baseline;
+}
+
+.pc__history-label {
+  flex-shrink: 0;
+  width: 90px;
+  font-size: $font-size-sm;
+  color: $text-muted;
+}
+
+.pc__history-value {
+  font-size: $font-size-sm;
+  color: $text-primary;
+  &--smiles {
+    font-family: monospace;
+    word-break: break-all;
+  }
+}
+
+.pc__history-confidence {
+  margin-left: $spacing-sm;
+  font-size: $font-size-xs;
+  font-weight: 600;
+}
+
+.pc__history-actions {
+  display: flex;
+  gap: $spacing-sm;
+  padding-top: $spacing-md;
+  border-top: 1px solid $border-light;
+  .pc__btn {
+    padding: $spacing-xs $spacing-md;
+    font-size: $font-size-sm;
+  }
 }
 </style>

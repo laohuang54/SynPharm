@@ -1,9 +1,13 @@
 package com.synpharm.client;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.synpharm.dto.request.PredictRequest;
 import com.synpharm.dto.response.AlgoResponse;
 import com.synpharm.dto.response.AlgorithmHealthResponse;
 import com.synpharm.dto.response.BatchPredictionResponse;
+import com.synpharm.exception.BusinessException;
+import com.synpharm.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -38,6 +42,8 @@ public class FastApiClient {
     @Value("${fastapi.health-retries:2}")
     private int healthRetries;
 
+    private final ObjectMapper objectMapper;
+
     public AlgoResponse predictSingle(PredictRequest request) {
         log.info("调用FastAPI单条预测: algoType={}", request.getAlgoType());
         try {
@@ -51,10 +57,10 @@ public class FastApiClient {
                     .block();
         } catch (WebClientResponseException e) {
             log.error("FastAPI单条预测HTTP错误: status={}, body={}", e.getStatusCode(), e.getResponseBodyAsString());
-            throw new RuntimeException("预测服务调用失败: " + e.getMessage());
+            throw translateError(e);
         } catch (Exception e) {
             log.error("FastAPI单条预测调用失败", e);
-            throw new RuntimeException("预测服务调用失败");
+            throw new BusinessException(ErrorCode.PREDICT_ERROR, "预测服务不可用，请稍后重试");
         }
     }
 
@@ -71,10 +77,10 @@ public class FastApiClient {
                     .block();
         } catch (WebClientResponseException e) {
             log.error("FastAPI批量预测HTTP错误: status={}, body={}", e.getStatusCode(), e.getResponseBodyAsString());
-            throw new RuntimeException("批量预测服务调用失败: " + e.getMessage());
+            throw translateError(e);
         } catch (Exception e) {
             log.error("FastAPI批量预测调用失败", e);
-            throw new RuntimeException("批量预测服务调用失败");
+            throw new BusinessException(ErrorCode.PREDICT_ERROR, "批量预测服务不可用，请稍后重试");
         }
     }
 
@@ -141,5 +147,38 @@ public class FastApiClient {
                 .message("算法引擎不可用: " + (lastError == null ? "未知错误" : lastError.getMessage()))
                 .checkedAt(LocalDateTime.now())
                 .build();
+    }
+
+    /**
+     * 把 FastAPI 返回的 4xx/5xx 错误转成业务异常，透传 FastAPI 响应体里的 detail 字段。
+     * <p>例如权重未就绪返回 404、输入非法返回 400，此处不再吞成笼统的"系统错误"。
+     */
+    private RuntimeException translateError(WebClientResponseException e) {
+        String detail = extractDetail(e.getResponseBodyAsString());
+        int status = e.getStatusCode().value();
+
+        if (status == 404) {
+            return new BusinessException(ErrorCode.NOT_FOUND, detail != null ? detail : "预测模型未就绪");
+        }
+        if (status == 400 || status == 422) {
+            return new BusinessException(ErrorCode.BAD_REQUEST, detail != null ? detail : "预测输入无效");
+        }
+        return new BusinessException(ErrorCode.SYSTEM_ERROR, "预测服务异常，请稍后重试");
+    }
+
+    /**
+     * 从 FastAPI 错误响应体 {"status":"error","detail":"..."} 中提取 detail 字段。
+     */
+    private String extractDetail(String body) {
+        if (body == null || body.isBlank()) {
+            return null;
+        }
+        try {
+            JsonNode node = objectMapper.readTree(body);
+            JsonNode detail = node.get("detail");
+            return (detail != null && !detail.isNull()) ? detail.asText() : null;
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 }

@@ -1,59 +1,50 @@
-from core.loader import ModelLoader
-from core.schemas import PredictionMetrics, InteractionInfo
+from core.schemas import PredictionMetrics
 from core.base_algo import BaseAlgo
-import torch
-import numpy as np
-import random
+from core.exceptions import InvalidInputError, ModelNotFoundError
+from services.algorithm_adapters import get_ddi_predictor
 
 
 class DDIService(BaseAlgo):
 
     def __init__(self):
-        self.model = ModelLoader().get_model("ddi")
-        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        self._predictor = None
+        self._loaded = False
+
+    def _get_predictor(self):
+        if not self._loaded:
+            self._predictor = get_ddi_predictor()
+            self._loaded = True
+        return self._predictor
 
     def predict(self, data: dict) -> PredictionMetrics:
         drug_a = data.get("drug_a", "")
         drug_b = data.get("drug_b", "")
 
-        if self.model is not None:
-            features_a = self._featurize_smiles(drug_a)
-            features_b = self._featurize_smiles(drug_b)
+        predictor = self._get_predictor()
+        if predictor is None:
+            # 权重/依赖缺失：直接报错，不再返回 mock
+            raise ModelNotFoundError("DDI")
 
-            tensor_a = torch.tensor(features_a, dtype=torch.float32).unsqueeze(0).to(self.device)
-            tensor_b = torch.tensor(features_b, dtype=torch.float32).unsqueeze(0).to(self.device)
+        # 真实推理：图内药物点积 -> sigmoid 概率；图外药物抛 ValueError -> 400
+        try:
+            confidence = predictor(drug_a, drug_b)
+        except ValueError as e:
+            raise InvalidInputError(str(e))
+        return self._to_metrics(confidence)
 
-            with torch.no_grad():
-                prediction = self.model(tensor_a, tensor_b)
-
-            return self._convert_to_metrics(prediction)
-        else:
-            return self._generate_mock_result("DDI")
-
-    def _featurize_smiles(self, smiles: str) -> list:
-        features = np.random.rand(128).tolist()
-        return features
-
-    def _convert_to_metrics(self, prediction) -> PredictionMetrics:
-        confidence = prediction["confidence"].item() if isinstance(prediction, dict) else 0.78
-        level = "high" if confidence >= 0.9 else "medium" if confidence >= 0.8 else "low"
-
+    def _to_metrics(self, confidence: float) -> PredictionMetrics:
         return PredictionMetrics(
             target_id="DDI_TARGET",
             target_name="药物相互作用",
-            confidence_score=round(confidence, 2),
-            confidence_level=level,
+            confidence_score=round(confidence, 4),
+            confidence_level=_confidence_level(confidence),
             interactions=[]
         )
 
-    def _generate_mock_result(self, type_name: str) -> PredictionMetrics:
-        confidence_score = 0.7 + random.random() * 0.3
-        level = "high" if confidence_score >= 0.9 else "medium" if confidence_score >= 0.8 else "low"
 
-        return PredictionMetrics(
-            target_id="DDI_TARGET",
-            target_name="药物相互作用",
-            confidence_score=round(confidence_score, 2),
-            confidence_level=level,
-            interactions=[]
-        )
+def _confidence_level(score: float) -> str:
+    if score >= 0.8:
+        return "high"
+    if score >= 0.6:
+        return "medium"
+    return "low"

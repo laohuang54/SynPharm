@@ -41,6 +41,7 @@
               :result="result"
               @detail="handleResultDetail"
               @3d="handleResult3D"
+              @delete="handleResultDelete"
             />
           </div>
 
@@ -58,6 +59,7 @@
 <script setup lang="ts">
 import { reactive, computed, ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { resultApi } from '@/api/predict'
 import Sidebar from '@/components/Sidebar.vue'
 import ResultCard from '@/components/ResultCard.vue'
@@ -124,14 +126,6 @@ const router = useRouter()
 const handleResultDetail = (result: PredictionResult) => {
   router.push({
     path: '/result/' + String(result.id),
-    query: {
-      id: String(result.id),
-      targetId: result.targetId || '',
-      targetName: result.targetName || '',
-      bindingAffinity: String(result.bindingAffinity ?? ''),
-      confidenceScore: String(result.confidenceScore ?? ''),
-      confidenceLevel: result.confidenceLevel || '',
-    },
   })
 }
 
@@ -144,6 +138,26 @@ const handleResult3D = (result: PredictionResult) => {
       targetId: result.targetId || '',
     },
   })
+}
+
+const handleResultDelete = async (result: PredictionResult) => {
+  try {
+    await ElMessageBox.confirm('确定删除该预测结果吗？', '提示', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+  } catch {
+    return
+  }
+
+  try {
+    await resultApi.deleteResult(result.id)
+    ElMessage.success('删除成功')
+    await loadResults()
+  } catch (error: unknown) {
+    ElMessage.error(error instanceof Error ? error.message : '删除失败')
+  }
 }
 </script>
 

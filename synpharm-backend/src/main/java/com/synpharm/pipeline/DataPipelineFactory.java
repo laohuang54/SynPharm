@@ -90,6 +90,8 @@ public class DataPipelineFactory implements PipelineFactory {
         AlgoResponse algoResult;
         try {
             algoResult = executor.execute(parsedInput);
+        } catch (BusinessException e) {
+            throw e;
         } catch (Exception e) {
             throw PipelineException.execute(e.getMessage(), e);
         }
@@ -149,6 +151,8 @@ public class DataPipelineFactory implements PipelineFactory {
         List<AlgoResponse> algoResults;
         try {
             algoResults = executor.batchExecute(parsedInputs);
+        } catch (BusinessException e) {
+            throw e;
         } catch (Exception e) {
             throw PipelineException.execute(e.getMessage(), e);
         }

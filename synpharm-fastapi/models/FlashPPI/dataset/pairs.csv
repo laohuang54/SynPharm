@@ -1,0 +1,5 @@
+pair_id,protein_a,protein_b,label
+E_coli_GroEL_GroES,GroEL_P0A6F5,GroES_P0A6F9,interacting
+E_coli_RpoD_RpoA,RpoD_P00579,RpoA_P0A7Z4,interacting
+E_coli_GroEL_RpoD,GroEL_P0A6F5,RpoD_P00579,negative_control
+E_coli_GroES_RpoA,GroES_P0A6F9,RpoA_P0A7Z4,negative_control

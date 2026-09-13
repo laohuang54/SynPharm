@@ -1,0 +1,5 @@
+pair_id,label,protein_a,protein_b,contact_score,clip_score,len1,len2,elapsed_s
+E_coli_GroEL_GroES,interacting,GroEL_P0A6F5,GroES_P0A6F9,0.11588,0.332127,548,97,11.82
+E_coli_RpoD_RpoA,interacting,RpoD_P00579,RpoA_P0A7Z4,0.135122,0.218054,613,329,3.98
+E_coli_GroEL_RpoD,negative_control,GroEL_P0A6F5,RpoD_P00579,0.050783,-0.066959,548,613,4.09
+E_coli_GroES_RpoA,negative_control,GroES_P0A6F9,RpoA_P0A7Z4,0.075778,0.311895,97,329,2.15

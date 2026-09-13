@@ -1,14 +1,20 @@
 package com.synpharm.model.entity;
 
-import com.baomidou.mybatisplus.annotation.*;
+import com.baomidou.mybatisplus.annotation.FieldFill;
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableLogic;
+import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 
 import java.time.LocalDateTime;
 
 /**
- * 用户收藏实体（修复方案 5.7）。
+ * 用户收藏实体。
  *
- * <p>映射数据库表 user_favorite。表已存在唯一约束 uk_user_result(user_id, result_id)；
+ * <p>对应用户收藏表 user_favorite，记录用户对预测结果的收藏。
+ * 表已存在唯一约束 uk_user_result(user_id, result_id)；
  * 取消收藏采用物理删除（见 UserFavoriteMapper.deletePhysically），
  * 避免逻辑删除后重新收藏同一结果时撞唯一键。
  *

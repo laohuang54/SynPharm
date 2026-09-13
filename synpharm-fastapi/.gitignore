@@ -6,9 +6,7 @@ __pycache__/
 venv/
 env/
 
-# 模型与日志（运行时卷挂载）
-models/*
-!models/.gitkeep
+# 模型源码入库；大权重 / 虚拟环境 / 运行时产物由各算法目录内的 .gitignore 负责忽略
 logs/
 *.log
 

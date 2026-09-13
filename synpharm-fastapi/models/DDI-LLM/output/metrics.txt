@@ -1,0 +1,5 @@
+test_auroc	0.873182
+test_aupr	0.850662
+num_nodes	1323
+num_test_edges	8327
+num_test_pairs	16654

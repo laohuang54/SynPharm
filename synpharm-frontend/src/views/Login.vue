@@ -393,11 +393,26 @@
 <script setup lang="ts">
 import { ref, reactive, onUnmounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { validateQqEmail, validatePassword, validateNickname, validateConfirmPassword } from '@/utils/validators'
 
 const authStore = useAuthStore()
 const router = useRouter()
+const route = useRoute()
+
+/**
+ * 登录/注册成功后统一跳转：
+ * 1. 优先使用 query 中的 redirect（用户访问受保护页被拦截时写入的原目标）
+ * 2. 没有 redirect 则跳默认仪表盘
+ * 3. 使用 replace 避免登录页残留在浏览器历史栈（点后退不会回到登录页）
+ * 4. 使用 await 确保跳转完成后再关闭 loading，避免竞态中断
+ */
+const navigateAfterLogin = async () => {
+  const redirect = (route.query.redirect as string) || '/dashboard'
+  // 防止 redirect 被拼接成外链或异常路径，做基本安全校验
+  const safeRedirect = redirect.startsWith('/') ? redirect : '/dashboard'
+  await router.replace(safeRedirect)
+}
 
 const mode = ref<'login' | 'register'>('login')
 const loginMethod = ref<'captcha' | 'password'>('captcha')
@@ -547,7 +562,7 @@ const handleCaptchaLogin = async () => {
   })
   
   if (result.success) {
-    router.push('/dashboard')
+    await navigateAfterLogin()
   } else {
     loginError.value = result.message || '登录失败，请稍后重试'
   }
@@ -568,7 +583,7 @@ const handlePasswordLogin = async () => {
   })
   
   if (result.success) {
-    router.push('/dashboard')
+    await navigateAfterLogin()
   } else {
     loginError.value = result.message || '登录失败，请稍后重试'
   }
@@ -590,7 +605,7 @@ const handleRegister = async () => {
   })
   
   if (result.success) {
-    router.push('/dashboard')
+    await navigateAfterLogin()
   } else {
     registerError.value = result.message || '注册失败，请稍后重试'
   }
@@ -603,7 +618,7 @@ const handleGuestLogin = async () => {
     loginType: 'guest'
   })
   if (result.success) {
-    router.push('/dashboard')
+    await navigateAfterLogin()
   }
 }
 

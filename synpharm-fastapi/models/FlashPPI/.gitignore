@@ -1,0 +1,15 @@
+# 大权重文件不随 git 提交（GitHub 单文件 100MB 硬上限，model.safetensors 约 2.7GB）
+# 克隆后运行 python download_weights.py 重新拉取
+weights/model.safetensors
+
+# 运行时产物
+*.npy
+*.png
+__pycache__/
+*.pyc
+
+# 虚拟环境
+.venv/
+
+# 下载的 wheel 缓存
+wheels/

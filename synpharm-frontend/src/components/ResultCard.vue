@@ -60,6 +60,7 @@
       <div class="result-card__actions">
         <button class="result-card__action-btn" @click="$emit('detail', result)">详情</button>
         <button class="result-card__action-btn result-card__action-btn--primary" @click="$emit('3d', result)">3D</button>
+        <el-button type="danger" size="small" @click="$emit('delete', result)">删除</el-button>
       </div>
     </div>
   </div>
@@ -75,6 +76,7 @@ defineProps<{
 defineEmits<{
   (e: 'detail', result: PredictionResult): void
   (e: '3d', result: PredictionResult): void
+  (e: 'delete', result: PredictionResult): void
 }>()
 
 const getConfidenceColor = (score: number): string => {

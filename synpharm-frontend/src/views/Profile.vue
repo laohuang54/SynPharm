@@ -13,7 +13,7 @@
             <p class="profile__user-email">{{ authStore.user?.email }}</p>
             <span class="profile__user-role">{{ authStore.isGuest ? '游客账号' : '已认证用户' }}</span>
           </div>
-          <button class="profile__edit-btn" @click="editProfile">编辑资料</button>
+          <button class="profile__edit-btn" @click="openEditProfile">编辑资料</button>
         </div>
       </header>
       
@@ -21,7 +21,7 @@
         <div class="profile__card">
           <h3 class="profile__card-title">账户安全</h3>
           <div class="profile__card-content">
-            <button class="profile__card-item">
+            <button class="profile__card-item" @click="openPasswordModal">
               <span class="profile__card-icon">🔐</span>
               <span class="profile__card-text">修改密码</span>
               <span class="profile__card-arrow">→</span>
@@ -46,7 +46,9 @@
         
         <div class="profile__card">
           <h3 class="profile__card-title">使用统计</h3>
-          <div class="profile__card-content profile__stats">
+          <div v-if="statsLoading" class="profile__card-content" style="color: #64748b;">加载中...</div>
+          <div v-else-if="statsError" class="profile__card-content" style="color: #ef4444;">{{ statsError }}</div>
+          <div v-else class="profile__card-content profile__stats">
             <div class="profile__stat-item">
               <span class="profile__stat-icon">📋</span>
               <span class="profile__stat-value">{{ stats.totalTasks }}</span>
@@ -107,27 +109,119 @@
         </div>
         
         <div class="profile__card profile__card--danger">
-          <button class="profile__danger-btn" @click="handleDeleteAccount">
+          <button class="profile__danger-btn" @click="openDeleteModal">
             删除账户
           </button>
         </div>
       </section>
     </main>
+
+    <!-- 成功提示 -->
+    <div v-if="successMessage" class="profile__toast">{{ successMessage }}</div>
+
+    <!-- 编辑资料弹窗 -->
+    <div v-if="showEditModal" class="pmodal" @click.self="closeEditModal">
+      <div class="pmodal__dialog">
+        <h3 class="pmodal__title">编辑资料</h3>
+        <div class="pmodal__field">
+          <label class="pmodal__label">昵称</label>
+          <input
+            v-model="editNickname"
+            type="text"
+            class="pmodal__input"
+            placeholder="请输入昵称"
+            @keyup.enter="saveProfile"
+          />
+        </div>
+        <div v-if="editError" class="pmodal__error">{{ editError }}</div>
+        <div class="pmodal__actions">
+          <button class="pmodal__btn pmodal__btn--ghost" @click="closeEditModal">取消</button>
+          <button class="pmodal__btn pmodal__btn--primary" :disabled="editLoading" @click="saveProfile">
+            {{ editLoading ? '保存中...' : '保存' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 修改密码弹窗 -->
+    <div v-if="showPasswordModal" class="pmodal" @click.self="closePasswordModal">
+      <div class="pmodal__dialog">
+        <h3 class="pmodal__title">修改密码</h3>
+        <div class="pmodal__field">
+          <label class="pmodal__label">原密码</label>
+          <input v-model="oldPassword" type="password" class="pmodal__input" placeholder="请输入原密码" />
+        </div>
+        <div class="pmodal__field">
+          <label class="pmodal__label">新密码</label>
+          <input v-model="newPassword" type="password" class="pmodal__input" placeholder="请输入新密码" />
+        </div>
+        <div class="pmodal__field">
+          <label class="pmodal__label">确认新密码</label>
+          <input
+            v-model="confirmPassword"
+            type="password"
+            class="pmodal__input"
+            placeholder="请再次输入新密码"
+            @keyup.enter="submitPassword"
+          />
+        </div>
+        <div v-if="passwordError" class="pmodal__error">{{ passwordError }}</div>
+        <div class="pmodal__actions">
+          <button class="pmodal__btn pmodal__btn--ghost" @click="closePasswordModal">取消</button>
+          <button class="pmodal__btn pmodal__btn--primary" :disabled="passwordLoading" @click="submitPassword">
+            {{ passwordLoading ? '提交中...' : '确认修改' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 删除账户弹窗 -->
+    <div v-if="showDeleteModal" class="pmodal" @click.self="closeDeleteModal">
+      <div class="pmodal__dialog">
+        <h3 class="pmodal__title pmodal__title--danger">删除账户</h3>
+        <p class="pmodal__warning">删除账户后所有数据将被永久清除且无法恢复，请谨慎操作。</p>
+        <div class="pmodal__field">
+          <label class="pmodal__label">当前密码</label>
+          <input
+            v-model="deletePassword"
+            type="password"
+            class="pmodal__input"
+            placeholder="请输入当前密码以确认删除"
+            @keyup.enter="confirmDeleteAccount"
+          />
+        </div>
+        <div v-if="deleteError" class="pmodal__error">{{ deleteError }}</div>
+        <div class="pmodal__actions">
+          <button class="pmodal__btn pmodal__btn--ghost" @click="closeDeleteModal">取消</button>
+          <button class="pmodal__btn pmodal__btn--danger" :disabled="deleteLoading" @click="confirmDeleteAccount">
+            {{ deleteLoading ? '删除中...' : '确认删除' }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { mockTasks, mockResults } from '@/data/mockResults'
+import { taskApi, resultApi } from '@/api/predict'
+import { authApi } from '@/api/auth'
 import Sidebar from '@/components/Sidebar.vue'
 import type { Task } from '@/types'
 
 const authStore = useAuthStore()
+const router = useRouter()
 
 const darkMode = ref(false)
 const notifications = ref(true)
 const dataTracking = ref(true)
+
+const tasks = ref<Task[]>([])
+const resultsTotal = ref(0)
+const statsLoading = ref(false)
+const statsError = ref('')
 
 const avatarText = computed(() => {
   if (!authStore.userNickname) return '👤'
@@ -135,18 +229,170 @@ const avatarText = computed(() => {
 })
 
 const stats = computed(() => ({
-  totalTasks: mockTasks.length,
-  completedTasks: mockTasks.filter((t: Task) => t.status === 'completed').length,
-  totalResults: mockResults.length,
-  storageUsed: '128 MB'
+  totalTasks: tasks.value.length,
+  completedTasks: tasks.value.filter((t) => t.status === 'completed').length,
+  totalResults: resultsTotal.value,
+  storageUsed: '暂无数据'
 }))
 
-const editProfile = () => {
-  console.log('编辑资料')
+const loadStats = async () => {
+  statsLoading.value = true
+  statsError.value = ''
+  try {
+    const [taskList, resultPage] = await Promise.all([
+      taskApi.getTaskList(),
+      resultApi.getResultList(1, 1)
+    ])
+    tasks.value = taskList as unknown as Task[]
+    resultsTotal.value = resultPage.total
+  } catch (error: unknown) {
+    statsError.value = error instanceof Error ? error.message : '加载统计数据失败'
+  } finally {
+    statsLoading.value = false
+  }
 }
 
-const handleDeleteAccount = () => {
-  console.log('删除账户')
+onMounted(async () => {
+  try {
+    await authStore.refreshUser()
+  } catch (error) {
+    console.error('刷新用户信息失败', error)
+  }
+
+  await loadStats()
+})
+
+// ================= 成功提示 =================
+const successMessage = ref('')
+let successTimer: number | null = null
+
+const showSuccess = (msg: string) => {
+  successMessage.value = msg
+  if (successTimer) clearTimeout(successTimer)
+  successTimer = window.setTimeout(() => {
+    successMessage.value = ''
+  }, 3000)
+}
+
+onUnmounted(() => {
+  if (successTimer) clearTimeout(successTimer)
+})
+
+// ================= 编辑资料 =================
+const showEditModal = ref(false)
+const editNickname = ref('')
+const editLoading = ref(false)
+const editError = ref('')
+
+const openEditProfile = () => {
+  editNickname.value = authStore.user?.nickname || ''
+  editError.value = ''
+  showEditModal.value = true
+}
+
+const closeEditModal = () => {
+  showEditModal.value = false
+}
+
+const saveProfile = async () => {
+  const nickname = editNickname.value.trim()
+  if (!nickname) {
+    editError.value = '昵称不能为空'
+    return
+  }
+  editLoading.value = true
+  editError.value = ''
+  try {
+    await authApi.updateProfile({ nickname })
+    authStore.updateNickname(nickname)
+    showEditModal.value = false
+    showSuccess('资料已更新')
+  } catch (error: unknown) {
+    editError.value = error instanceof Error ? error.message : '保存失败'
+  } finally {
+    editLoading.value = false
+  }
+}
+
+// ================= 修改密码 =================
+const showPasswordModal = ref(false)
+const oldPassword = ref('')
+const newPassword = ref('')
+const confirmPassword = ref('')
+const passwordLoading = ref(false)
+const passwordError = ref('')
+
+const openPasswordModal = () => {
+  oldPassword.value = ''
+  newPassword.value = ''
+  confirmPassword.value = ''
+  passwordError.value = ''
+  showPasswordModal.value = true
+}
+
+const closePasswordModal = () => {
+  showPasswordModal.value = false
+}
+
+const submitPassword = async () => {
+  if (!oldPassword.value) {
+    passwordError.value = '请输入原密码'
+    return
+  }
+  if (!newPassword.value) {
+    passwordError.value = '请输入新密码'
+    return
+  }
+  if (newPassword.value !== confirmPassword.value) {
+    passwordError.value = '两次输入的新密码不一致'
+    return
+  }
+  passwordLoading.value = true
+  passwordError.value = ''
+  try {
+    await authApi.changePassword(oldPassword.value, newPassword.value)
+    showPasswordModal.value = false
+    showSuccess('密码修改成功')
+  } catch (error: unknown) {
+    passwordError.value = error instanceof Error ? error.message : '修改密码失败'
+  } finally {
+    passwordLoading.value = false
+  }
+}
+
+// ================= 删除账户 =================
+const showDeleteModal = ref(false)
+const deletePassword = ref('')
+const deleteLoading = ref(false)
+const deleteError = ref('')
+
+const openDeleteModal = () => {
+  deletePassword.value = ''
+  deleteError.value = ''
+  showDeleteModal.value = true
+}
+
+const closeDeleteModal = () => {
+  showDeleteModal.value = false
+}
+
+const confirmDeleteAccount = async () => {
+  if (!deletePassword.value) {
+    deleteError.value = '请输入当前密码'
+    return
+  }
+  deleteLoading.value = true
+  deleteError.value = ''
+  try {
+    await authApi.deleteAccount(deletePassword.value)
+    await authStore.logout()
+    showDeleteModal.value = false
+    router.push('/login')
+  } catch (error: unknown) {
+    deleteError.value = error instanceof Error ? error.message : '删除失败，请重试'
+  } finally {
+    deleteLoading.value = false
+  }
 }
 </script>
 
@@ -438,6 +684,144 @@ const handleDeleteAccount = () => {
     background: rgba(239, 68, 68, 0.08);
     transform: translateY(-2px);
     box-shadow: 0 8px 24px rgba(239, 68, 68, 0.1);
+  }
+}
+
+/* ===================== 弹窗 & 提示 ===================== */
+.profile__toast {
+  position: fixed;
+  top: 90px;
+  right: $spacing-xl;
+  padding: $spacing-sm $spacing-lg;
+  background: $success-color;
+  color: #ffffff;
+  border-radius: $border-radius-md;
+  font-size: $font-size-sm;
+  box-shadow: $shadow-md;
+  z-index: 1001;
+}
+
+.pmodal {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.pmodal__dialog {
+  width: 420px;
+  max-width: calc(100vw - 40px);
+  background: #ffffff;
+  border-radius: $border-radius-xl;
+  padding: $spacing-xl;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+}
+
+.pmodal__title {
+  font-size: $font-size-lg;
+  font-weight: 600;
+  color: $text-primary;
+  margin: 0 0 $spacing-lg;
+
+  &--danger {
+    color: $error-color;
+  }
+}
+
+.pmodal__warning {
+  margin: 0 0 $spacing-lg;
+  padding: $spacing-sm $spacing-md;
+  background: rgba(239, 68, 68, 0.08);
+  border-radius: $border-radius-md;
+  font-size: $font-size-sm;
+  color: $error-color;
+}
+
+.pmodal__field {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-xs;
+  margin-bottom: $spacing-md;
+}
+
+.pmodal__label {
+  font-size: $font-size-sm;
+  font-weight: 500;
+  color: $text-secondary;
+}
+
+.pmodal__input {
+  padding: $spacing-sm $spacing-md;
+  border: 1px solid $border-color;
+  border-radius: $border-radius-md;
+  font-size: $font-size-base;
+  color: $text-primary;
+  background: #ffffff;
+
+  &:focus {
+    outline: none;
+    border-color: $accent-color;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+  }
+}
+
+.pmodal__error {
+  margin-bottom: $spacing-md;
+  padding: $spacing-sm $spacing-md;
+  background: rgba(239, 68, 68, 0.08);
+  border-radius: $border-radius-md;
+  font-size: $font-size-sm;
+  color: $error-color;
+}
+
+.pmodal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: $spacing-md;
+  margin-top: $spacing-sm;
+}
+
+.pmodal__btn {
+  padding: $spacing-sm $spacing-lg;
+  border: none;
+  border-radius: $border-radius-md;
+  font-size: $font-size-sm;
+  cursor: pointer;
+  transition: $transition-fast;
+
+  &--ghost {
+    background: $bg-tertiary;
+    color: $text-secondary;
+
+    &:hover {
+      background: $border-light;
+    }
+  }
+
+  &--primary {
+    background: $primary-color;
+    color: #ffffff;
+
+    &:hover:not(:disabled) {
+      background: $primary-dark;
+    }
+  }
+
+  &--danger {
+    background: $error-color;
+    color: #ffffff;
+
+    &:hover:not(:disabled) {
+      background: #dc2626;
+    }
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 }
 </style>

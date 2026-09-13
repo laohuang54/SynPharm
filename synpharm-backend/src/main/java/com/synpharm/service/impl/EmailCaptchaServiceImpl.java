@@ -52,8 +52,8 @@ public class EmailCaptchaServiceImpl implements CaptchaService {
     /** 通知服务（依赖接口，不依赖具体实现） */
     private final NotifyService emailNotifyService;
 
-    /** 发件邮箱（配置了才真实发送邮件；未配置则进入开发模式，验证码回显） */
-    @Value("${QQ_EMAIL:}")
+    /** 发件邮箱（从 spring.mail.username 读取，与 JavaMailSender 共用同一配置；未配置则无法发真实邮件） */
+    @Value("${spring.mail.username:}")
     private String senderEmail;
 
     /** 显式开发模式开关：true 时验证码直接回显给前端（仅限本地/测试，生产必须保持 false） */

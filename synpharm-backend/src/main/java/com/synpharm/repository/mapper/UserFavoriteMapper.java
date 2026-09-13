@@ -6,7 +6,10 @@ import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
 /**
- * 用户收藏数据访问接口（修复方案 5.7）。
+ * 用户收藏数据访问接口。
+ *
+ * <p>继承 MyBatis-Plus 的 BaseMapper，提供用户收藏数据的 CRUD 操作。
+ * 取消收藏使用物理删除（deletePhysically），见下方说明。
  *
  * @author SynPharm Team
  * @version 1.0.0

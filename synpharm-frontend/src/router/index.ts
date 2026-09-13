@@ -42,6 +42,12 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/tasks/:id',
+      name: 'TaskDetail',
+      component: () => import('@/views/TaskDetail.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
       path: '/targets',
       name: 'Targets',
       component: () => import('@/views/Targets.vue'),
@@ -68,16 +74,47 @@ const router = createRouter({
   ]
 })
 
+/** 登录后默认跳转的首页路由 */
+const DEFAULT_HOME_PATH = '/dashboard'
+
 router.beforeEach((to, _from, next) => {
   const authStore = useAuthStore()
-  
-  if (to.meta.requiresAuth && !authStore.isLoggedIn) {
-    next('/login')
-  } else if (to.path === '/login' && authStore.isLoggedIn) {
-    next('/dashboard')
-  } else {
+
+  // ---------- 分支 1：访问根路径 ----------
+  if (to.path === '/') {
+    // 已登录 → 直接去仪表盘；未登录 → 留在首页
+    if (authStore.isLoggedIn) {
+      next(DEFAULT_HOME_PATH)
+      return
+    }
     next()
+    return
   }
+
+  // ---------- 分支 2：访问登录页 ----------
+  if (to.path === '/login') {
+    if (authStore.isLoggedIn) {
+      // 已登录还来登录页 → 去首页（优先使用 redirect 参数，否则用默认首页）
+      const redirect = (to.query.redirect as string) || DEFAULT_HOME_PATH
+      next(redirect)
+      return
+    }
+    next()
+    return
+  }
+
+  // ---------- 分支 3：访问需要认证的页面 ----------
+  if (to.meta.requiresAuth && !authStore.isLoggedIn) {
+    // 未登录 → 跳登录页，并带上 redirect 参数以便登录后跳回
+    next({
+      path: '/login',
+      query: { redirect: to.fullPath }
+    })
+    return
+  }
+
+  // ---------- 其他情况：放行 ----------
+  next()
 })
 
 export default router

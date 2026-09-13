@@ -4,7 +4,15 @@
     <main class="result-detail__content">
       <router-link to="/results" class="result-detail__back">← 返回结果列表</router-link>
 
-      <template v-if="result">
+      <div v-if="loading" class="result-detail__empty">
+        加载中…
+      </div>
+
+      <div v-else-if="error" class="result-detail__empty result-detail__empty--error">
+        {{ error }}
+      </div>
+
+      <template v-else-if="result">
         <header class="result-detail__header">
           <h1 class="result-detail__title">{{ result.targetName }}</h1>
           <p class="result-detail__subtitle">{{ result.targetId }}</p>
@@ -13,7 +21,9 @@
         <section class="result-detail__metrics">
           <div class="result-detail__metric">
             <span class="result-detail__metric-label">结合亲和力</span>
-            <span class="result-detail__metric-value">{{ result.bindingAffinity.toFixed(2) }} kcal/mol</span>
+            <span class="result-detail__metric-value">
+              {{ result.bindingAffinity != null ? result.bindingAffinity.toFixed(2) + ' kcal/mol' : 'N/A' }}
+            </span>
           </div>
           <div class="result-detail__metric">
             <span class="result-detail__metric-label">置信度</span>
@@ -48,39 +58,48 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { ref, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { resultApi } from '@/api/predict'
 import Sidebar from '@/components/Sidebar.vue'
 import type { PredictionResult } from '@/types'
 
 const router = useRouter()
 const route = useRoute()
 
-const resultId = computed(() => {
-  return (route.params.id as string) || (route.query.id as string) || ''
-})
+const result = ref<PredictionResult | null>(null)
+const loading = ref(false)
+const error = ref('')
 
-const result = computed<PredictionResult | null>(() => {
-  if (!resultId.value && !route.query.targetId && !route.query.targetName) {
-    return null
+async function loadResult(): Promise<void> {
+  const id = (route.params.id as string) || (route.query.id as string) || ''
+  if (!id) {
+    result.value = null
+    error.value = ''
+    loading.value = false
+    return
   }
+
+  loading.value = true
+  error.value = ''
+
   try {
-    return {
-      id: resultId.value || (route.query.id as string) || '',
-      targetId: (route.query.targetId as string) || '',
-      targetName: (route.query.targetName as string) || '',
-      ligandSmiles: '',
-      bindingAffinity: parseFloat(route.query.bindingAffinity as string) || 0,
-      confidenceScore: parseFloat(route.query.confidenceScore as string) || 0,
-      confidenceLevel: (route.query.confidenceLevel as PredictionResult['confidenceLevel']) || 'medium',
-      interactions: [],
-      createdAt: new Date().toISOString(),
-      datasetInfo: { name: '', size: 0, description: '', source: 'internal' as const },
-    }
-  } catch {
-    return null
+    result.value = await resultApi.getResultDetail(id)
+  } catch (err) {
+    result.value = null
+    error.value = err instanceof Error ? err.message : '加载预测结果失败'
+  } finally {
+    loading.value = false
   }
-})
+}
+
+watch(
+  () => route.params.id,
+  () => {
+    loadResult()
+  },
+  { immediate: true }
+)
 
 const goToVisualization = () => {
   if (!result.value) return
@@ -93,6 +112,7 @@ const goToVisualization = () => {
     },
   })
 }
+console.log('ResultDetail加载了')
 </script>
 
 <style lang="scss" scoped>
@@ -222,5 +242,9 @@ const goToVisualization = () => {
     text-decoration: none;
     font-weight: 500;
   }
+}
+
+.result-detail__empty--error {
+  color: $error-color;
 }
 </style>
